@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function Objects({ onNavigate }) {
+export default function Objects({ onNavigate, highlightId }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [search, setSearch] = useState('');
@@ -18,6 +18,12 @@ export default function Objects({ onNavigate }) {
   const [rentValue, setRentValue] = useState('');
 
   useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+  if (highlightId && objects.length > 0) {
+    const o = objects.find(o => o.id === highlightId);
+    if (o) setSelected(o);
+  }
+}, [highlightId, objects]);
 
   async function fetchAll() {
     setLoading(true);
