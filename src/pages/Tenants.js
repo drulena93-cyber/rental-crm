@@ -13,6 +13,8 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [editingStatus, setEditingStatus] = useState(null);
+  const [dadataLoading, setDadataLoading] = useState(false);
+const DADATA_TOKEN = 'СЮДА_ВСТАВЬ_СВОЙ_КЛЮЧ';
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -60,7 +62,42 @@ export default function Tenants({ onNavigate, highlightId }) {
     setForm({ type: 'ФИЗ.ЛИЦО', status: 'Активный', shared: false });
     setShowForm(true);
   }
-
+async function findByInn(inn) {
+  if (!inn || inn.length < 10) return alert('Введите ИНН (10 или 12 цифр)');
+  setDadataLoading(true);
+  try {
+    const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${DADATA_TOKEN}`
+      },
+      body: JSON.stringify({ query: inn, count: 1 })
+    });
+    const data = await res.json();
+    if (!data.suggestions || data.suggestions.length === 0) {
+      alert('Организация не найдена');
+      setDadataLoading(false);
+      return;
+    }
+    const s = data.suggestions[0];
+    const d = s.data;
+    setForm(f => ({
+      ...f,
+      name: s.value || f.name,
+      inn: d.inn || f.inn,
+      ogrn: d.ogrn || f.ogrn,
+      kpp: d.kpp || f.kpp,
+      passport: d.address?.value || f.passport,
+      director: d.management?.name || f.director,
+      type: d.type === 'INDIVIDUAL' ? 'ИП' : 'ЮРИД.ЛИЦО',
+      basis: d.management?.post || f.basis,
+    }));
+  } catch(e) {
+    alert('Ошибка запроса к DaData');
+  }
+  setDadataLoading(false);
+}
   function openEdit(t) {
     setForm({ ...t });
     setShowForm(true);
@@ -257,7 +294,15 @@ async function deleteTenant(id) {
             <div className="form-group"><label>Вид деятельности</label><input value={form.activity || ''} onChange={e => setForm({...form, activity: e.target.value})} /></div>
             <div className="form-group"><label>Паспорт / Прописка</label><textarea rows={2} value={form.passport || ''} onChange={e => setForm({...form, passport: e.target.value})} /></div>
             <div className="form-grid">
-              <div className="form-group"><label>ИНН</label><input value={form.inn || ''} onChange={e => setForm({...form, inn: e.target.value})} /></div>
+              <div className="form-group"><label>ИНН</label>
+  <div style={{display:'flex', gap:6}}>
+    <input value={form.inn || ''} onChange={e => setForm({...form, inn: e.target.value})} placeholder="Введите ИНН..." />
+    <button type="button" onClick={() => findByInn(form.inn)}
+      style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 12px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap'}}>
+      {dadataLoading ? '...' : '🔍 Найти'}
+    </button>
+  </div>
+</div>
               <div className="form-group"><label>ОГРН/П</label><input value={form.ogrn || ''} onChange={e => setForm({...form, ogrn: e.target.value})} /></div>
               <div className="form-group"><label>Дата регистрации</label><input type="date" value={form.reg_date || ''} onChange={e => setForm({...form, reg_date: e.target.value})} /></div>
               <div className="form-group"><label>Окончание договора</label><input type="date" value={form.contract_end || ''} onChange={e => setForm({...form, contract_end: e.target.value})} /></div>
