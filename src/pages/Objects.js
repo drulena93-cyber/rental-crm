@@ -111,7 +111,6 @@ async function deleteObj(id) {
         <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{objects.length}</div></div>
         <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{rented.length}</div></div>
         <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{free.length}</div></div>
-        <div className="stat"><div className="stat-label">Доход/мес</div><div className="stat-val amber">{income.toLocaleString('ru-RU')} ₽</div></div>
       </div>
 
       <div className="toolbar">
