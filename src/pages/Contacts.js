@@ -18,7 +18,7 @@ export default function Contacts({ tenantId, onNavigate }) {
 
   async function fetchAll() {
     setLoading(true);
-    const { data: cons } = await supabase.from('contacts').select('*').order('full_name');
+    const { data: cons } = await supabase.from('contacts').select('*').is('deleted_at', null).order('full_name');
     const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
     setContacts(cons || []);
     setTenants(tens || []);
@@ -55,11 +55,11 @@ export default function Contacts({ tenantId, onNavigate }) {
     fetchAll();
   }
 
-  async function deleteContact(id) {
-    if (!window.confirm('Удалить контакт?')) return;
-    await supabase.from('contacts').delete().eq('id', id);
-    fetchAll();
-  }
+async function deleteContact(id) {
+  if (!window.confirm('Переместить контакт в корзину?')) return;
+  await supabase.from('contacts').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  fetchAll();
+}
 
   return (
     <div>
