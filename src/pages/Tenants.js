@@ -25,7 +25,7 @@ export default function Tenants({ onNavigate, highlightId }) {
 
   async function fetchAll() {
     setLoading(true);
-    const { data: tens } = await supabase.from('tenants').select('*').order('name');
+    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
     const { data: objs } = await supabase.from('objects').select('*').order('name');
     setTenants(tens || []);
     setObjects(objs || []);
@@ -81,12 +81,12 @@ export default function Tenants({ onNavigate, highlightId }) {
     fetchAll();
   }
 
-  async function deleteTenant(id) {
-    if (!window.confirm('Удалить арендатора?')) return;
-    await supabase.from('tenants').delete().eq('id', id);
-    setSelected(null);
-    fetchAll();
-  }
+async function deleteTenant(id) {
+  if (!window.confirm('Переместить арендатора в корзину?')) return;
+  await supabase.from('tenants').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  setSelected(null);
+  fetchAll();
+}
 
   function statusBadge(t) {
     const s = t.status;
