@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function Objects() {
+export default function Objects({ onNavigate }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterFloor, setFilterFloor] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterShared, setFilterShared] = useState('');
   const [selected, setSelected] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
+  const [editingStatus, setEditingStatus] = useState(null);
+  const [editingRent, setEditingRent] = useState(null);
+  const [rentValue, setRentValue] = useState('');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -23,16 +28,35 @@ export default function Objects() {
     setLoading(false);
   }
 
+  const types = [...new Set(objects.map(o => o.type).filter(Boolean))];
+  const floors = [...new Set(objects.map(o => o.floor).filter(Boolean))].sort((a,b)=>a-b);
+
   const filtered = objects.filter(o => {
     if (search && !o.name?.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterStatus && o.status !== filterStatus) return false;
     if (filterFloor && o.floor !== parseInt(filterFloor)) return false;
+    if (filterType && o.type !== filterType) return false;
+    if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
     return true;
   });
 
   const rented = objects.filter(o => o.status === 'Сдано');
   const free = objects.filter(o => o.status === 'Не сдано');
   const income = rented.reduce((a, b) => a + (b.rent || 0), 0);
+
+  async function quickUpdateStatus(id, status) {
+    await supabase.from('objects').update({ status }).eq('id', id);
+    setObjects(objects.map(o => o.id === id ? { ...o, status } : o));
+    setEditingStatus(null);
+  }
+
+  async function quickUpdateRent(id) {
+    const rent = parseFloat(rentValue);
+    if (isNaN(rent)) return;
+    await supabase.from('objects').update({ rent }).eq('id', id);
+    setObjects(objects.map(o => o.id === id ? { ...o, rent } : o));
+    setEditingRent(null);
+  }
 
   function openAdd() {
     setForm({ status: 'Не сдано', shared: false });
@@ -63,10 +87,14 @@ export default function Objects() {
     fetchAll();
   }
 
-  function statusBadge(s) {
-    if (s === 'Сдано') return <span className="badge badge-green">{s}</span>;
-    if (s === 'Не сдано') return <span className="badge badge-red">{s}</span>;
-    return <span className="badge badge-gray">{s}</span>;
+  function statusBadge(o) {
+    const s = o.status;
+    const cls = s === 'Сдано' ? 'badge-green' : s === 'Не сдано' ? 'badge-red' : 'badge-gray';
+    return (
+      <span className={`badge ${cls}`} style={{cursor:'pointer'}} onClick={e => { e.stopPropagation(); setEditingStatus(o.id); }}>
+        {s} ▾
+      </span>
+    );
   }
 
   const getTenant = (id) => tenants.find(t => t.object_id === id);
@@ -84,15 +112,20 @@ export default function Objects() {
         <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Все статусы</option>
-          <option>Сдано</option>
-          <option>Не сдано</option>
-          <option>Не учитывать</option>
+          <option>Сдано</option><option>Не сдано</option><option>Не учитывать</option>
+        </select>
+        <select value={filterType} onChange={e => setFilterType(e.target.value)}>
+          <option value="">Все типы</option>
+          {types.map(t => <option key={t}>{t}</option>)}
         </select>
         <select value={filterFloor} onChange={e => setFilterFloor(e.target.value)}>
           <option value="">Все этажи</option>
-          <option value="1">1 этаж</option>
-          <option value="2">2 этаж</option>
-          <option value="3">3 этаж</option>
+          {floors.map(f => <option key={f} value={f}>{f} этаж</option>)}
+        </select>
+        <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
+          <option value="">Совместное: все</option>
+          <option value="да">Да</option>
+          <option value="нет">Нет</option>
         </select>
         <button className="btn-add" onClick={openAdd}>+ Добавить объект</button>
       </div>
@@ -118,11 +151,32 @@ export default function Objects() {
                 <tr key={o.id} onClick={() => setSelected(o)}>
                   <td>{o.name}</td>
                   <td>{o.type}</td>
-                  <td>{statusBadge(o.status)}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    {editingStatus === o.id ? (
+                      <select autoFocus value={o.status} onChange={e => quickUpdateStatus(o.id, e.target.value)} onBlur={() => setEditingStatus(null)}>
+                        <option>Сдано</option>
+                        <option>Не сдано</option>
+                        <option>Не учитывать</option>
+                      </select>
+                    ) : statusBadge(o)}
+                  </td>
                   <td>{o.floor || '—'}</td>
                   <td>{o.area ? `${o.area} м²` : '—'}</td>
-                  <td>{t ? t.name : <span style={{color:'#aaa'}}>—</span>}</td>
-                  <td>{o.rent ? o.rent.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+                  <td onClick={e => { e.stopPropagation(); if(t) { setSelected(null); onNavigate('tenants', t.id); }}}>
+                    {t ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>{t.name}</span> : <span style={{color:'#aaa'}}>—</span>}
+                  </td>
+                  <td onClick={e => e.stopPropagation()}>
+                    {editingRent === o.id ? (
+                      <input autoFocus type="number" value={rentValue} onChange={e => setRentValue(e.target.value)}
+                        onBlur={() => quickUpdateRent(o.id)}
+                        onKeyDown={e => { if(e.key==='Enter') quickUpdateRent(o.id); if(e.key==='Escape') setEditingRent(null); }}
+                        style={{width:90}} />
+                    ) : (
+                      <span style={{cursor:'pointer'}} onClick={() => { setEditingRent(o.id); setRentValue(o.rent||''); }}>
+                        {o.rent ? o.rent.toLocaleString('ru-RU') + ' ₽' : '—'} ✎
+                      </span>
+                    )}
+                  </td>
                   <td>{o.payment || '—'}</td>
                 </tr>
               );
@@ -139,21 +193,25 @@ export default function Objects() {
               {selected.name}
               <button className="modal-close" onClick={() => setSelected(null)}>✕ Закрыть</button>
             </div>
-            <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{statusBadge(selected.status)}</div></div>
+            <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{selected.status}</div></div>
             <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{selected.type || '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Этаж / офис</div><div className="detail-val">{selected.floor ? `${selected.floor} / ${selected.office || ''}` : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Этаж</div><div className="detail-val">{selected.floor || '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Площадь</div><div className="detail-val">{selected.area ? `${selected.area} м²` : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Стоимость/мес</div><div className="detail-val">{selected.rent ? selected.rent.toLocaleString('ru-RU') + ' ₽' : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Страховой взнос</div><div className="detail-val">{selected.insurance ? selected.insurance.toLocaleString('ru-RU') + ' ₽' : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Оплата помещения</div><div className="detail-val">{selected.payment || '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Стоимость коммуналки</div><div className="detail-val">{selected.utility_cost ? selected.utility_cost.toLocaleString('ru-RU') + ' ₽' : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Вид коммуналки</div><div className="detail-val">{selected.utility_type || '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
             <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Описание</div><div className="detail-val">{selected.description || '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Ремонтные работы</div><div className="detail-val">{selected.description || '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments || '—'}</div></div>
             {getTenant(selected.id) && (
               <div className="linked-section">
                 <div className="linked-title">Арендатор</div>
-                <div className="linked-item">{getTenant(selected.id).name}</div>
+                <div className="linked-item" style={{cursor:'pointer', color:'#534AB7'}}
+                  onClick={() => { setSelected(null); onNavigate('tenants', getTenant(selected.id).id); }}>
+                  → {getTenant(selected.id).name}
+                </div>
               </div>
             )}
             <div className="form-actions">
@@ -190,6 +248,8 @@ export default function Objects() {
                   <option>с 25 по 05</option><option>с 1 по 10</option><option>с 5 по 15</option>
                 </select>
               </div>
+              <div className="form-group"><label>Стоимость коммуналки (₽)</label><input type="number" value={form.utility_cost || ''} onChange={e => setForm({...form, utility_cost: parseFloat(e.target.value)})} /></div>
+              <div className="form-group"><label>Вид коммуналки</label><input value={form.utility_type || ''} onChange={e => setForm({...form, utility_type: e.target.value})} /></div>
             </div>
             <div className="form-group"><label>Арендатор</label>
               <select value={form.tenant_id || ''} onChange={e => setForm({...form, tenant_id: e.target.value})}>
