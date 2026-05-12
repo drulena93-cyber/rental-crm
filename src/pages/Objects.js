@@ -27,7 +27,7 @@ export default function Objects({ onNavigate, highlightId }) {
 
   async function fetchAll() {
     setLoading(true);
-    const { data: objs } = await supabase.from('objects').select('*').order('name');
+    const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
     const { data: tens } = await supabase.from('tenants').select('*').order('name');
     setObjects(objs || []);
     setTenants(tens || []);
@@ -86,12 +86,12 @@ export default function Objects({ onNavigate, highlightId }) {
     fetchAll();
   }
 
-  async function deleteObj(id) {
-    if (!window.confirm('Удалить объект?')) return;
-    await supabase.from('objects').delete().eq('id', id);
-    setSelected(null);
-    fetchAll();
-  }
+async function deleteObj(id) {
+  if (!window.confirm('Переместить объект в корзину?')) return;
+  await supabase.from('objects').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  setSelected(null);
+  fetchAll();
+}
 
   function statusBadge(o) {
     const s = o.status;
