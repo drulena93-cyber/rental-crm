@@ -21,7 +21,7 @@ export default function Objects({ onNavigate, highlightId }) {
   useEffect(() => {
   if (highlightId && objects.length > 0) {
     const o = objects.find(o => o.id === highlightId);
-    if (o) setSelected(o);
+    if (o) { setSelected(o); window.scrollTo(0, 0); }
   }
 }, [highlightId, objects]);
 
