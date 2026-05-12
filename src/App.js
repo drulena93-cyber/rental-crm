@@ -3,6 +3,7 @@ import Objects from './pages/Objects';
 import Tenants from './pages/Tenants';
 import Analytics from './pages/Analytics';
 import Contacts from './pages/Contacts';
+import Trash from './pages/Trash';
 import './App.css';
 
 export default function App() {
@@ -11,8 +12,6 @@ export default function App() {
   const [contactTenantId, setContactTenantId] = useState(null);
 
   function handleNavigate(section, id) {
-    setHighlightId(null);
-    setContactTenantId(null);
     if (section === 'tenants') {
       setTab('tenants');
       setHighlightId(id);
@@ -36,6 +35,7 @@ export default function App() {
           <button className={tab === 'tenants' ? 'active' : ''} onClick={() => setTab('tenants')}>Арендаторы</button>
           <button className={tab === 'contacts' ? 'active' : ''} onClick={() => setTab('contacts')}>Контакты</button>
           <button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>Аналитика</button>
+          <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
         </nav>
       </div>
       <div className="content">
@@ -43,6 +43,7 @@ export default function App() {
         {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} />}
         {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
         {tab === 'analytics' && <Analytics />}
+        {tab === 'trash' && <Trash />}
       </div>
     </div>
   );
