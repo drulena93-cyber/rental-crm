@@ -14,7 +14,7 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [loading, setLoading] = useState(true);
   const [editingStatus, setEditingStatus] = useState(null);
   const [dadataLoading, setDadataLoading] = useState(false);
-const DADATA_TOKEN = 'СЮДА_ВСТАВЬ_СВОЙ_КЛЮЧ';
+const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
 
   useEffect(() => { fetchAll(); }, []);
 
