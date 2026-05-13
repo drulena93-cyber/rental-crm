@@ -16,7 +16,9 @@ export default function Objects({ onNavigate, highlightId }) {
   const [editingStatus, setEditingStatus] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [editingValue, setEditingValue] = useState('');
-
+const [note, setNote] = useState('');
+const [editingNote, setEditingNote] = useState(false);
+const [noteValue, setNoteValue] = useState('');
   useEffect(() => { fetchAll(); }, []);
 
   useEffect(() => {
@@ -29,9 +31,11 @@ export default function Objects({ onNavigate, highlightId }) {
   async function fetchAll() {
     setLoading(true);
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
-    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
+   const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
+    const { data: noteData } = await supabase.from('settings').select('value').eq('id', 'objects_note').single();
     setObjects(objs || []);
     setTenants(tens || []);
+    setNote(noteData?.value || '');
     setLoading(false);
   }
 
@@ -103,7 +107,20 @@ export default function Objects({ onNavigate, highlightId }) {
         <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{objects.length}</div></div>
         <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{rented.length}</div></div>
         <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{free.length}</div></div>
-        <div className="stat"><div className="stat-label">Доход/мес</div><div className="stat-val amber">{rented.reduce((a,b)=>a+(b.rent||0),0).toLocaleString('ru-RU')} ₽</div></div>
+        <div className="stat" style={{cursor:'pointer'}} onClick={() => { setEditingNote(true); setNoteValue(note); }}>
+  <div className="stat-label">📝 Заметка {!editingNote && <span style={{fontSize:10,color:'#aaa'}}>✎</span>}</div>
+  {editingNote ? (
+    <textarea autoFocus value={noteValue} onChange={e => setNoteValue(e.target.value)}
+      onBlur={async () => { await supabase.from('settings').update({value: noteValue}).eq('id','objects_note'); setNote(noteValue); setEditingNote(false); }}
+      onKeyDown={e => { if(e.key==='Escape') setEditingNote(false); }}
+      style={{width:'100%',fontSize:13,border:'1px solid #ddd',borderRadius:6,padding:6,resize:'none',height:60}}
+      onClick={e => e.stopPropagation()} />
+  ) : (
+    <div style={{fontSize:13,color:note?'#1a1a1a':'#aaa',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
+      {note || 'Нажмите чтобы добавить заметку...'}
+    </div>
+  )}
+</div>
       </div>
 
       <div className="toolbar">
