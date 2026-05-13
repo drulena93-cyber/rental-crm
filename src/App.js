@@ -4,6 +4,7 @@ import Tenants from './pages/Tenants';
 import Analytics from './pages/Analytics';
 import Contacts from './pages/Contacts';
 import Trash from './pages/Trash';
+import Settings from './pages/Settings';
 import './App.css';
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
           <button className={tab === 'contacts' ? 'active' : ''} onClick={() => setTab('contacts')}>Контакты</button>
           <button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>Аналитика</button>
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>⚙️ Настройки</button>
         </nav>
       </div>
       <div className="content">
@@ -44,6 +46,7 @@ export default function App() {
         {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
         {tab === 'analytics' && <Analytics />}
         {tab === 'trash' && <Trash />}
+        {tab === 'settings' && <Settings />}
       </div>
     </div>
   );
