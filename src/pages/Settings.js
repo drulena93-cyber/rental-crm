@@ -1,32 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function Settings() {
   const [orgs, setOrgs] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [templates, setTemplates] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef();
 
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
-    const { data } = await supabase.from('organizations').select('*').order('name');
-    setOrgs(data || []);
+    const { data: orgsData } = await supabase.from('organizations').select('*').order('name');
+    const { data: filesData } = await supabase.storage.from('templates').list();
+    setOrgs(orgsData || []);
+    setTemplates(filesData || []);
     setLoading(false);
   }
 
   function openAdd() {
     setForm({ is_default: false, basis: 'Устава', position: 'директора' });
     setShowForm(true);
-    setSelected(null);
   }
 
   function openEdit(org) {
     setForm({ ...org });
     setShowForm(true);
-    setSelected(null);
   }
 
   async function saveForm() {
@@ -35,10 +37,6 @@ export default function Settings() {
       await supabase.from('organizations').update(form).eq('id', form.id);
     } else {
       await supabase.from('organizations').insert(form);
-    }
-    if (form.is_default) {
-      await supabase.from('organizations').update({ is_default: false }).neq('id', form.id || '00000000-0000-0000-0000-000000000000');
-      await supabase.from('organizations').update({ is_default: true }).eq('name', form.name);
     }
     setShowForm(false);
     fetchAll();
@@ -50,15 +48,51 @@ export default function Settings() {
     fetchAll();
   }
 
+  async function uploadTemplate(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const { error } = await supabase.storage.from('templates').upload(file.name, file, { upsert: true });
+    if (error) alert('Ошибка загрузки: ' + error.message);
+    setUploading(false);
+    fetchAll();
+  }
+
+  async function downloadTemplate(name) {
+    const { data } = await supabase.storage.from('templates').download(name);
+    if (!data) return alert('Ошибка скачивания');
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function deleteTemplate(name) {
+    if (!window.confirm(`Удалить шаблон "${name}"?`)) return;
+    await supabase.storage.from('templates').remove([name]);
+    fetchAll();
+  }
+
+  function formatSize(bytes) {
+    if (!bytes) return '—';
+    if (bytes < 1024) return bytes + ' Б';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' КБ';
+    return (bytes / 1024 / 1024).toFixed(1) + ' МБ';
+  }
+
   return (
     <div>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
-        <h2 style={{fontSize:16, fontWeight:500}}>⚙️ Настройки — Организации арендодателя</h2>
+        <h2 style={{fontSize:16, fontWeight:500}}>⚙️ Настройки</h2>
         <button className="btn-add" onClick={openAdd}>+ Добавить организацию</button>
       </div>
 
+      <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Организации арендодателя</div>
+
       {loading ? <p>Загрузка...</p> : (
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))', gap:12}}>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))', gap:12, marginBottom:24}}>
           {orgs.map(org => (
             <div key={org.id} style={{background:'#fff', border:`1.5px solid ${org.is_default ? '#534AB7' : '#e5e5e5'}`, borderRadius:10, padding:16}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10}}>
@@ -87,6 +121,52 @@ export default function Settings() {
         </div>
       )}
 
+      <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Шаблоны документов</div>
+
+      <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:16}}>
+        <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:16}}>
+          <button className="btn-add" onClick={() => fileRef.current.click()} disabled={uploading}>
+            {uploading ? 'Загружается...' : '📎 Загрузить шаблон'}
+          </button>
+          <span style={{fontSize:12, color:'#888'}}>Поддерживаются файлы .docx, .doc, .pdf</span>
+          <input ref={fileRef} type="file" accept=".docx,.doc,.pdf" style={{display:'none'}} onChange={uploadTemplate} />
+        </div>
+
+        {templates.length === 0 ? (
+          <div style={{color:'#aaa', fontSize:13, textAlign:'center', padding:20}}>Шаблоны не загружены</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Название файла</th>
+                <th>Размер</th>
+                <th>Дата загрузки</th>
+                <th style={{width:180}}>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {templates.map(t => (
+                <tr key={t.name}>
+                  <td>📄 {t.name}</td>
+                  <td>{formatSize(t.metadata?.size)}</td>
+                  <td style={{fontSize:12, color:'#888'}}>{t.created_at ? new Date(t.created_at).toLocaleDateString('ru-RU') : '—'}</td>
+                  <td>
+                    <button onClick={() => downloadTemplate(t.name)}
+                      style={{background:'#EAF3DE', color:'#3B6D11', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:12, marginRight:6}}>
+                      ⬇ Скачать
+                    </button>
+                    <button onClick={() => deleteTemplate(t.name)}
+                      style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:12}}>
+                      ✕ Удалить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -95,7 +175,7 @@ export default function Settings() {
               <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
             </div>
             <div className="form-group"><label>Название краткое *</label><input value={form.name||''} onChange={e => setForm({...form, name: e.target.value})} placeholder='ООО "Эрия"' /></div>
-            <div className="form-group"><label>Название полное</label><input value={form.full_name||''} onChange={e => setForm({...form, full_name: e.target.value})} placeholder='Общество с ограниченной ответственностью "Эрия"' /></div>
+            <div className="form-group"><label>Название полное</label><input value={form.full_name||''} onChange={e => setForm({...form, full_name: e.target.value})} /></div>
             <div className="form-grid">
               <div className="form-group"><label>ФИО директора (именительный)</label><input value={form.director||''} onChange={e => setForm({...form, director: e.target.value})} /></div>
               <div className="form-group"><label>ФИО директора (родительный)</label><input value={form.director_rod||''} onChange={e => setForm({...form, director_rod: e.target.value})} placeholder="Крякова Михаила Сергеевича" /></div>
