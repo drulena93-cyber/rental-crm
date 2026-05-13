@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import Documents from './Documents';
 import { saveAs } from 'file-saver';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
@@ -16,13 +17,7 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [editingStatus, setEditingStatus] = useState(null);
-  const [generating, setGenerating] = useState(false);
-const [showContractForm, setShowContractForm] = useState(false);
-const [contractForm, setContractForm] = useState({ номер_договора: '', дата_договора: '' });
-const [organizations, setOrganizations] = useState([]);
-const [selectedOrg, setSelectedOrg] = useState('');
-const [templates, setTemplates] = useState([]);
-const [selectedTemplate, setSelectedTemplate] = useState('');
+const [showDocuments, setShowDocuments] = useState(false);
   const [dadataLoading, setDadataLoading] = useState(false);
 const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
 
@@ -334,7 +329,7 @@ async function generateContract(tenant) {
             </div>
 <div className="form-actions">
   <button className="btn-cancel" onClick={() => deleteTenant(selected.id)}>В корзину</button>
-  <button style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'8px 14px', fontSize:13, cursor:'pointer'}} onClick={() => { setShowContractForm(true); }}>📄 Договор</button>
+  <button style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'8px 14px', fontSize:13, cursor:'pointer'}} onClick={() => setShowDocuments(true)}>📄 Документы</button>
   <button className="btn-save" onClick={() => openEdit(selected)}>Редактировать</button>
 </div>
           </div>
@@ -393,49 +388,12 @@ async function generateContract(tenant) {
           </div>
         </div>
       )}
-        {showContractForm && selected && (
-  <div className="modal-overlay" onClick={() => setShowContractForm(false)}>
-    <div className="modal" onClick={e => e.stopPropagation()}>
-      <div className="modal-title">
-        📄 Сформировать договор
-        <button className="modal-close" onClick={() => setShowContractForm(false)}>✕</button>
-      </div>
-      <div className="form-group"><label>Арендатор</label>
-        <input value={selected.name} disabled style={{background:'#f8f8f8'}} />
-      </div>
-      <div className="form-group"><label>Организация арендодателя</label>
-        <select value={selectedOrg} onChange={e => setSelectedOrg(e.target.value)}>
-          <option value="">— Выберите организацию —</option>
-          {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-      </div>
-      <div className="form-group"><label>Шаблон договора</label>
-        <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}>
-          <option value="">— Выберите шаблон —</option>
-          {templates.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-        </select>
-      </div>
-      <div className="form-grid">
-        <div className="form-group"><label>Номер договора</label>
-          <input value={contractForm.номер_договора} onChange={e => setContractForm({...contractForm, номер_договора: e.target.value})} placeholder="Например: 42" />
-        </div>
-        <div className="form-group"><label>Дата договора</label>
-          <input type="date" value={contractForm.дата_договора} onChange={e => setContractForm({...contractForm, дата_договора: e.target.value})} />
-        </div>
-      </div>
-      {getObject(selected.object_id) && (
-        <div className="form-group"><label>Объект</label>
-          <input value={getObject(selected.object_id).name} disabled style={{background:'#f8f8f8'}} />
-        </div>
-      )}
-      <div className="form-actions">
-        <button className="btn-cancel" onClick={() => setShowContractForm(false)}>Отмена</button>
-        <button className="btn-save" onClick={() => generateContract(selected)} disabled={generating}>
-          {generating ? 'Формируется...' : '⬇ Скачать договор'}
-        </button>
-      </div>
-    </div>
-  </div>
+        {showDocuments && selected && (
+  <Documents
+    tenantId={selected.id}
+    tenantName={selected.name}
+    onClose={() => setShowDocuments(false)}
+  />
 )}
     </div>
   );
