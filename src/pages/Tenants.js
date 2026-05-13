@@ -167,11 +167,11 @@ async function deleteTenant(id) {
         <input placeholder="Поиск по имени..." value={search} onChange={e => setSearch(e.target.value)} />
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">Все типы</option>
-          <option>ФИЗ.ЛИЦО</option><option>ЮРИД.ЛИЦО</option><option>ИП</option>
+          <option>ФИЗ.ЛИЦО</option><option>ЮРИД.ЛИЦО</option><option>ИП</option><option>Не указан</option>
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Все статусы</option>
-          <option>Активный</option><option>Завершён</option>
+          <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
         </select>
         <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
           <option value="">Совместное: все</option>
@@ -205,7 +205,11 @@ async function deleteTenant(id) {
                   <td onClick={e => e.stopPropagation()}>
                     {editingStatus === t.id ? (
                       <select autoFocus value={t.status} onChange={e => quickUpdateStatus(t.id, e.target.value)} onBlur={() => setEditingStatus(null)}>
-                        <option>Активный</option><option>Завершён</option>
+                        <option>Активный</option>
+<option>Неактивный</option>
+<option>В работе</option>
+<option>Съехал</option>
+<option>Не указан</option>
                       </select>
                     ) : statusBadge(t)}
                   </td>
@@ -282,12 +286,12 @@ async function deleteTenant(id) {
             <div className="form-grid">
               <div className="form-group"><label>Тип</label>
                 <select value={form.type || ''} onChange={e => setForm({...form, type: e.target.value})}>
-                  <option>ФИЗ.ЛИЦО</option><option>ЮРИД.ЛИЦО</option><option>ИП</option>
+                  <option>ФИЗ.ЛИЦО</option><option>ЮРИД.ЛИЦО</option><option>ИП</option><option>Не указан</option>
                 </select>
               </div>
               <div className="form-group"><label>Статус</label>
                 <select value={form.status || ''} onChange={e => setForm({...form, status: e.target.value})}>
-                  <option>Активный</option><option>Завершён</option>
+                  <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
                 </select>
               </div>
             </div>
