@@ -34,14 +34,6 @@ const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
   setLoading(true);
   const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
   const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
-  const { data: orgsData } = await supabase.from('organizations').select('*').order('name');
-  const { data: tmpl } = await supabase.storage.from('templates').list();
-  setTenants(tens || []);
-  setObjects(objs || []);
-  setOrganizations(orgsData || []);
-  setTemplates(tmpl || []);
-  const def = orgsData?.find(o => o.is_default);
-  if (def) setSelectedOrg(def.id);
   setLoading(false);
 }
 
