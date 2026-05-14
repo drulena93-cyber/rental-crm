@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: supabase-proxy
+    runtime: node
+    rootDir: proxy
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
