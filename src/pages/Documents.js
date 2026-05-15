@@ -33,10 +33,11 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     const def = orgs?.find(o => o.is_default);
     if (def) setSelectedOrg(def.id);
 
-    // Загружаем шаблоны из Supabase Storage
+    // Загружаем шаблоны с Яндекс Диска
     try {
-      const { data: tmpl } = await supabase.storage.from('templates').list();
-      setTemplates(tmpl || []);
+      const res = await fetch('/api/yandex-templates');
+      const data = await res.json();
+      setTemplates(data.items || []);
     } catch(e) {
       setTemplates([]);
     }
@@ -107,8 +108,14 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     try {
       const org = organizations.find(o => o.id === selectedOrg);
       const { data: objData } = await supabase.from('objects').select('*').eq('id', tenant?.object_id).single();
-      const { data: fileData } = await supabase.storage.from('templates').download(selectedTemplate);
+
+      // Скачиваем шаблон с Яндекс Диска
+      const tmpl = templates.find(t => t.path === selectedTemplate);
+      if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
+      const fileRes = await fetch(tmpl.public_url);
+      const fileData = await fileRes.blob();
       const arrayBuffer = await fileData.arrayBuffer();
+
       const zip = new PizZip(arrayBuffer);
       const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
       doc.render({
@@ -288,7 +295,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
             <div className="form-group"><label>Шаблон</label>
               <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}>
                 <option value="">— Выберите шаблон —</option>
-                {templates.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                {templates.map(t => <option key={t.name} value={t.path}>{t.name}</option>)}
               </select>
             </div>
             <div className="form-grid">
