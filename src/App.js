@@ -5,6 +5,7 @@ import Analytics from './pages/Analytics';
 import Contacts from './pages/Contacts';
 import Trash from './pages/Trash';
 import Settings from './pages/Settings';
+import AllDocuments from './pages/AllDocuments';
 import './App.css';
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
           <button className={tab === 'objects' ? 'active' : ''} onClick={() => setTab('objects')}>Объекты</button>
           <button className={tab === 'tenants' ? 'active' : ''} onClick={() => setTab('tenants')}>Арендаторы</button>
           <button className={tab === 'contacts' ? 'active' : ''} onClick={() => setTab('contacts')}>Контакты</button>
+          <button className={tab === 'documents' ? 'active' : ''} onClick={() => setTab('documents')}>📄 Документы</button>
           <button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>Аналитика</button>
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>⚙️ Настройки</button>
@@ -44,6 +46,7 @@ export default function App() {
         {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} />}
         {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} />}
         {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
+        {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
         {tab === 'analytics' && <Analytics />}
         {tab === 'trash' && <Trash />}
         {tab === 'settings' && <Settings />}
