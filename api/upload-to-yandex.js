@@ -1,5 +1,9 @@
 const fetch = require('node-fetch');
 
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -12,7 +16,7 @@ module.exports = async (req, res) => {
     const folderPath = `disk:/CRM Аренда/${folder || 'Документы'}`;
     const filePath = `${folderPath}/${filename}`;
 
-    // Создаём папку если не существует
+    // Создаём папки если не существуют
     await fetch(
       `https://cloud-api.yandex.net/v1/disk/resources?path=${encodeURIComponent('disk:/CRM Аренда')}`,
       { method: 'PUT', headers: { Authorization: `OAuth ${token}` } }
@@ -40,11 +44,17 @@ module.exports = async (req, res) => {
       headers: { 'Content-Type': 'application/octet-stream' }
     });
 
+    // Ждём пока файл обработается
+    await sleep(2000);
+
     // Публикуем файл
     await fetch(
       `https://cloud-api.yandex.net/v1/disk/resources/publish?path=${encodeURIComponent(filePath)}`,
       { method: 'PUT', headers: { Authorization: `OAuth ${token}` } }
     );
+
+    // Ждём пока ссылка появится
+    await sleep(1000);
 
     // Получаем public_url
     const infoRes = await fetch(
