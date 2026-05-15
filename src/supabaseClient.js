@@ -35,6 +35,13 @@ export const supabase = {
           const { data } = await query(`SELECT ${columns} FROM ${table} WHERE ${col} = $1 LIMIT 1`, [val]);
           return { data: data[0] || null, error: null };
         },
+        order: (col2, opts) => ({
+          then: async (resolve) => {
+            const dir = opts?.ascending === false ? 'DESC' : 'ASC';
+            const { data } = await query(`SELECT ${columns} FROM ${table} WHERE ${col} = $1 ORDER BY ${col2} ${dir}`, [val]);
+            resolve({ data, error: null });
+          }
+        }),
         then: async (resolve) => {
           const { data } = await query(`SELECT ${columns} FROM ${table} WHERE ${col} = $1`, [val]);
           resolve({ data, error: null });
