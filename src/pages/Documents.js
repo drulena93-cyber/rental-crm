@@ -119,7 +119,7 @@ const dlRes = await fetch('/api/download-template', {
 });
 const dlData = await dlRes.json();
 if (!dlData.success) return alert('Ошибка скачивания шаблона');
-const arrayBuffer = Buffer.from(dlData.filedata, 'base64').buffer;
+const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length); for (let i = 0; i < binary.length; i++) {   bytes[i] = binary.charCodeAt(i); } const arrayBuffer = bytes.buffer;
 
       const zip = new PizZip(arrayBuffer);
       const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
