@@ -15,10 +15,19 @@ export default function Settings() {
   async function fetchAll() {
     setLoading(true);
     const { data: orgsData } = await supabase.from('organizations').select('*').order('name');
-    const { data: filesData } = await supabase.storage.from('templates').list();
     setOrgs(orgsData || []);
-    setTemplates(filesData || []);
+    await fetchTemplates();
     setLoading(false);
+  }
+
+  async function fetchTemplates() {
+    try {
+      const res = await fetch('/api/yandex-templates');
+      const data = await res.json();
+      setTemplates(data.items || []);
+    } catch(e) {
+      setTemplates([]);
+    }
   }
 
   function openAdd() {
@@ -52,27 +61,36 @@ export default function Settings() {
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    const { error } = await supabase.storage.from('templates').upload(file.name, file, { upsert: true });
-    if (error) alert('Ошибка загрузки: ' + error.message);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch('/api/yandex-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, filedata: base64 })
+      });
+      const data = await res.json();
+      if (!data.success) alert('Ошибка загрузки: ' + data.error);
+      await fetchTemplates();
+    } catch(e) {
+      alert('Ошибка: ' + e.message);
+    }
     setUploading(false);
-    fetchAll();
+    e.target.value = '';
   }
 
-  async function downloadTemplate(name) {
-    const { data } = await supabase.storage.from('templates').download(name);
-    if (!data) return alert('Ошибка скачивания');
-    const url = URL.createObjectURL(data);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function deleteTemplate(name) {
-    if (!window.confirm(`Удалить шаблон "${name}"?`)) return;
-    await supabase.storage.from('templates').remove([name]);
-    fetchAll();
+  async function deleteTemplate(path) {
+    if (!window.confirm('Удалить шаблон?')) return;
+    await fetch('/api/yandex-templates', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+    await fetchTemplates();
   }
 
   function formatSize(bytes) {
@@ -126,7 +144,7 @@ export default function Settings() {
       <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:16}}>
         <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:16}}>
           <button className="btn-add" onClick={() => fileRef.current.click()} disabled={uploading}>
-            {uploading ? 'Загружается...' : '📎 Загрузить шаблон'}
+            {uploading ? 'Загружается на Яндекс Диск...' : '📎 Загрузить шаблон'}
           </button>
           <span style={{fontSize:12, color:'#888'}}>Поддерживаются файлы .docx, .doc, .pdf</span>
           <input ref={fileRef} type="file" accept=".docx,.doc,.pdf" style={{display:'none'}} onChange={uploadTemplate} />
@@ -148,14 +166,16 @@ export default function Settings() {
               {templates.map(t => (
                 <tr key={t.name}>
                   <td>📄 {t.name}</td>
-                  <td>{formatSize(t.metadata?.size)}</td>
-                  <td style={{fontSize:12, color:'#888'}}>{t.created_at ? new Date(t.created_at).toLocaleDateString('ru-RU') : '—'}</td>
+                  <td>{formatSize(t.size)}</td>
+                  <td style={{fontSize:12, color:'#888'}}>{t.created ? new Date(t.created).toLocaleDateString('ru-RU') : '—'}</td>
                   <td>
-                    <button onClick={() => downloadTemplate(t.name)}
-                      style={{background:'#EAF3DE', color:'#3B6D11', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:12, marginRight:6}}>
-                      ⬇ Скачать
-                    </button>
-                    <button onClick={() => deleteTemplate(t.name)}
+                    {t.public_url && (
+                      <a href={t.public_url} target="_blank" rel="noreferrer"
+                        style={{background:'#EAF3DE', color:'#3B6D11', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:12, marginRight:6, textDecoration:'none'}}>
+                        🔗 Открыть
+                      </a>
+                    )}
+                    <button onClick={() => deleteTemplate(t.path)}
                       style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:12}}>
                       ✕ Удалить
                     </button>
@@ -183,12 +203,10 @@ export default function Settings() {
               <div className="form-group"><label>Основание</label><input value={form.basis||''} onChange={e => setForm({...form, basis: e.target.value})} placeholder="Устава" /></div>
             </div>
             <div className="form-group"><label>Юридический адрес</label><input value={form.address_legal||''} onChange={e => setForm({...form, address_legal: e.target.value})} /></div>
-            <div className="form-group"><label>Фактический адрес</label><input value={form.address_fact||''} onChange={e => setForm({...form, address_fact: e.target.value})} /></div>
             <div className="form-grid">
               <div className="form-group"><label>ИНН</label><input value={form.inn||''} onChange={e => setForm({...form, inn: e.target.value})} /></div>
               <div className="form-group"><label>ОГРН / ОГРНИП</label><input value={form.ogrn||''} onChange={e => setForm({...form, ogrn: e.target.value})} /></div>
               <div className="form-group"><label>КПП</label><input value={form.kpp||''} onChange={e => setForm({...form, kpp: e.target.value})} /></div>
-              <div className="form-group"><label>ОКПО</label><input value={form.okpo||''} onChange={e => setForm({...form, okpo: e.target.value})} /></div>
             </div>
             <div className="form-group"><label>Банк</label><input value={form.bank||''} onChange={e => setForm({...form, bank: e.target.value})} /></div>
             <div className="form-grid">
