@@ -26,15 +26,42 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     setLoading(true);
     const { data: docs } = await supabase.from('documents').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
     const { data: orgs } = await supabase.from('organizations').select('*').order('name');
-    const { data: tmpl } = await supabase.storage.from('templates').list();
-    const { data: ten } = await supabase.from('tenants').select('*, objects(*)').eq('id', tenantId).single();
+    const { data: ten } = await supabase.from('tenants').select('*').eq('id', tenantId).single();
     setDocuments(docs || []);
     setOrganizations(orgs || []);
-    setTemplates(tmpl || []);
     setTenant(ten);
     const def = orgs?.find(o => o.is_default);
     if (def) setSelectedOrg(def.id);
+
+    // Загружаем шаблоны из Supabase Storage
+    try {
+      const { data: tmpl } = await supabase.storage.from('templates').list();
+      setTemplates(tmpl || []);
+    } catch(e) {
+      setTemplates([]);
+    }
     setLoading(false);
+  }
+
+  async function uploadToYandex(filedata, filename, folder) {
+    const res = await fetch('/api/upload-to-yandex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, filedata, folder })
+    });
+    return await res.json();
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 
   async function uploadFile(e) {
@@ -42,32 +69,33 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     if (!file) return;
     if (!uploadForm.name) return alert('Введите название документа');
     setUploading(true);
-    const path = `${tenantId}/${Date.now()}_${file.name}`;
-    const { error } = await supabase.storage.from('documents').upload(path, file);
-    if (error) { alert('Ошибка загрузки: ' + error.message); setUploading(false); return; }
-    await supabase.from('documents').insert({
-      tenant_id: tenantId,
-      name: uploadForm.name,
-      type: uploadForm.type,
-      file_path: path,
-      file_size: file.size,
-    });
+    try {
+      const base64 = await fileToBase64(file);
+      const safeName = `${Date.now()}_${file.name}`;
+      const result = await uploadToYandex(base64, safeName, `Документы/${tenantName}`);
+      if (!result.success) {
+        alert('Ошибка загрузки на Яндекс Диск: ' + result.error);
+        setUploading(false);
+        return;
+      }
+      await supabase.from('documents').insert({
+        tenant_id: tenantId,
+        name: uploadForm.name,
+        type: uploadForm.type,
+        file_path: result.public_url,
+        file_size: file.size,
+      });
+      setShowUploadForm(false);
+      setUploadForm({ name: '', type: 'Договор' });
+      fetchAll();
+    } catch(e) {
+      alert('Ошибка: ' + e.message);
+    }
     setUploading(false);
-    setShowUploadForm(false);
-    setUploadForm({ name: '', type: 'Договор' });
-    fetchAll();
   }
 
-  async function downloadDoc(doc) {
-    const { data } = await supabase.storage.from('documents').download(doc.file_path);
-    if (!data) return alert('Ошибка скачивания');
-    const filename = doc.file_path.split('/').pop().replace(/^\d+_/, '');
-    saveAs(data, filename);
-  }
-
-  async function deleteDoc(id, path) {
-    if (!window.confirm('Удалить документ?')) return;
-    await supabase.storage.from('documents').remove([path]);
+  async function deleteDoc(id) {
+    if (!window.confirm('Удалить документ из CRM?')) return;
     await supabase.from('documents').delete().eq('id', id);
     fetchAll();
   }
@@ -78,7 +106,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     setGenerating(true);
     try {
       const org = organizations.find(o => o.id === selectedOrg);
-      const obj = tenant?.objects;
+      const { data: objData } = await supabase.from('objects').select('*').eq('id', tenant?.object_id).single();
       const { data: fileData } = await supabase.storage.from('templates').download(selectedTemplate);
       const arrayBuffer = await fileData.arrayBuffer();
       const zip = new PizZip(arrayBuffer);
@@ -108,24 +136,39 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         арендатор_банк: tenant?.bank || '',
         арендатор_рс: '',
         арендатор_кс: '',
-        объект_название: obj?.name || '',
-        объект_площадь: obj?.area || '',
-        объект_стоимость: obj?.rent || '',
-        объект_этаж: obj?.floor || '',
+        объект_название: objData?.name || '',
+        объект_площадь: objData?.area || '',
+        объект_стоимость: objData?.rent || '',
+        объект_этаж: objData?.floor || '',
       });
-      const blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+
+      const blob = doc.getZip().generate({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
       const filename = `Договор_${tenant?.name}_${contractForm.номер_договора || 'б-н'}.docx`;
 
-      // Сохраняем в базу
-      const path = `${tenantId}/${Date.now()}_${filename}`;
-      await supabase.storage.from('documents').upload(path, blob);
+      // Конвертируем blob в base64
+      const base64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+
+      // Загружаем на Яндекс Диск
+      const safeName = `${Date.now()}_${filename}`;
+      const result = await uploadToYandex(base64, safeName, `Документы/${tenantName}`);
+
+      // Сохраняем запись в БД
       await supabase.from('documents').insert({
         tenant_id: tenantId,
         name: `Договор №${contractForm.номер_договора || 'б-н'} от ${contractForm.дата_договора || '___'}`,
         type: 'Договор',
-        file_path: path,
+        file_path: result.public_url || '',
+        file_size: blob.size,
       });
 
+      // Скачиваем локально
       saveAs(blob, filename);
       setShowContractForm(false);
       fetchAll();
@@ -189,11 +232,13 @@ export default function Documents({ tenantId, tenantName, onClose }) {
                   <td>{formatSize(doc.file_size)}</td>
                   <td style={{fontSize:12, color:'#888'}}>{new Date(doc.created_at).toLocaleDateString('ru-RU')}</td>
                   <td>
-                    <button onClick={() => downloadDoc(doc)}
-                      style={{background:'#EAF3DE', color:'#3B6D11', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4}}>
-                      ⬇
-                    </button>
-                    <button onClick={() => deleteDoc(doc.id, doc.file_path)}
+                    {doc.file_path && (
+                      <a href={doc.file_path} target="_blank" rel="noreferrer"
+                        style={{background:'#EAF3DE', color:'#3B6D11', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4, textDecoration:'none'}}>
+                        🔗 Открыть
+                      </a>
+                    )}
+                    <button onClick={() => deleteDoc(doc.id)}
                       style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>
                       ✕
                     </button>
@@ -223,7 +268,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
             </div>
             <div style={{display:'flex', gap:8}}>
               <button className="btn-save" onClick={() => fileRef.current.click()} disabled={uploading}>
-                {uploading ? 'Загружается...' : '📎 Выбрать файл'}
+                {uploading ? 'Загружается на Яндекс Диск...' : '📎 Выбрать файл'}
               </button>
               <button className="btn-cancel" onClick={() => setShowUploadForm(false)}>Отмена</button>
             </div>
