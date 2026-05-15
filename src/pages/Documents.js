@@ -109,12 +109,17 @@ export default function Documents({ tenantId, tenantName, onClose }) {
       const org = organizations.find(o => o.id === selectedOrg);
       const { data: objData } = await supabase.from('objects').select('*').eq('id', tenant?.object_id).single();
 
-      // Скачиваем шаблон с Яндекс Диска
-      const tmpl = templates.find(t => t.path === selectedTemplate);
-      if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
-      const fileRes = await fetch(tmpl.public_url);
-      const fileData = await fileRes.blob();
-      const arrayBuffer = await fileData.arrayBuffer();
+      // Скачиваем шаблон через сервер
+const tmpl = templates.find(t => t.path === selectedTemplate);
+if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
+const dlRes = await fetch('/api/download-template', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ public_url: tmpl.public_url })
+});
+const dlData = await dlRes.json();
+if (!dlData.success) return alert('Ошибка скачивания шаблона');
+const arrayBuffer = Buffer.from(dlData.filedata, 'base64').buffer;
 
       const zip = new PizZip(arrayBuffer);
       const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
