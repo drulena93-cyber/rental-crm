@@ -8,9 +8,24 @@ module.exports = async (req, res) => {
 
   try {
     const { public_url } = req.body;
-    const fileRes = await fetch(public_url);
+    
+    // Сначала получаем реальную ссылку для скачивания
+    const token = process.env.YANDEX_DISK_TOKEN;
+    const infoRes = await fetch(
+      `https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=${encodeURIComponent(public_url)}`,
+      { headers: { Authorization: `OAuth ${token}` } }
+    );
+    const infoData = await infoRes.json();
+    
+    if (!infoData.href) {
+      return res.status(500).json({ error: 'Нет ссылки для скачивания: ' + JSON.stringify(infoData) });
+    }
+
+    // Скачиваем файл по прямой ссылке
+    const fileRes = await fetch(infoData.href);
     const buffer = await fileRes.buffer();
     const base64 = buffer.toString('base64');
+    
     return res.status(200).json({ success: true, filedata: base64 });
   } catch(err) {
     return res.status(500).json({ error: err.message });
