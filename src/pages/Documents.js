@@ -79,13 +79,14 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         setUploading(false);
         return;
       }
-      await supabase.from('documents').insert({
-        tenant_id: tenantId,
-        name: uploadForm.name,
-        type: uploadForm.type,
-        file_path: result.public_url,
-        file_size: file.size,
-      });
+await supabase.from('documents').insert({
+  tenant_id: tenantId,
+  name: uploadForm.name,
+  type: uploadForm.type,
+  file_path: result.public_url,
+  file_size: file.size,
+  yandex_path: result.path,
+});
       setShowUploadForm(false);
       setUploadForm({ name: '', type: 'Договор' });
       fetchAll();
@@ -95,8 +96,16 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     setUploading(false);
   }
 
-  async function deleteDoc(id) {
-    if (!window.confirm('Удалить документ из CRM?')) return;
+async function deleteDoc(id) {
+    if (!window.confirm('Удалить документ из CRM и Яндекс Диска?')) return;
+    const doc = documents.find(d => d.id === id);
+    if (doc?.yandex_path) {
+      await fetch('/api/yandex-templates', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: doc.yandex_path })
+      });
+    }
     await supabase.from('documents').delete().eq('id', id);
     fetchAll();
   }
@@ -173,12 +182,13 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
 
       // Сохраняем запись в БД
       await supabase.from('documents').insert({
-        tenant_id: tenantId,
-        name: `Договор №${contractForm.номер_договора || 'б-н'} от ${contractForm.дата_договора || '___'}`,
-        type: 'Договор',
-        file_path: result.public_url || '',
-        file_size: blob.size,
-      });
+  tenant_id: tenantId,
+  name: `Договор №${contractForm.номер_договора || 'б-н'} от ${contractForm.дата_договора || '___'}`,
+  type: 'Договор',
+  file_path: result.public_url || '',
+  file_size: blob.size,
+  yandex_path: result.path || '',
+});
 
       // Скачиваем локально
       saveAs(blob, filename);
