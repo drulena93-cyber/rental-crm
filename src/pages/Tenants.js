@@ -57,8 +57,46 @@ async function fetchAll() {
     return diff >= 0 && diff <= 30;
   });
 
-  async function quickUpdateStatus(id, status) {
+async function quickUpdateStatus(id, status) {
     await supabase.from('tenants').update({ status }).eq('id', id);
+
+    // Если арендатор съехал — создаём запись в истории объекта
+    if (status === 'Съехал') {
+      const tenant = tenants.find(t => t.id === id);
+      if (tenant) {
+        // Ищем объект через object_tenants
+        const otRes = await fetch('/api/db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `SELECT object_id FROM object_tenants WHERE tenant_id = $1 LIMIT 1`,
+            params: [id]
+          })
+        });
+        const otData = await otRes.json();
+        const objectId = otData.rows?.[0]?.object_id || tenant.object_id;
+
+        if (objectId) {
+          await fetch('/api/db', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto)
+                      VALUES ($1, $2, $3, $4, $5, $6, true)`,
+              params: [
+                objectId,
+                id,
+                tenant.name,
+                tenant.contract_start || null,
+                new Date().toISOString().split('T')[0],
+                'Автоматически при смене статуса на Съехал'
+              ]
+            })
+          });
+        }
+      }
+    }
+
     setTenants(tenants.map(t => t.id === id ? { ...t, status } : t));
     setEditingStatus(null);
   }
