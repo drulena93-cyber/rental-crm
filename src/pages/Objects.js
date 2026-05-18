@@ -19,6 +19,8 @@ export default function Objects({ onNavigate, highlightId }) {
   const [note, setNote] = useState('');
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState('');
+  const [sortField, setSortField] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -40,6 +42,20 @@ export default function Objects({ onNavigate, highlightId }) {
     setLoading(false);
   }
 
+  function handleSort(field) {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  }
+
+  function sortIcon(field) {
+    if (sortField !== field) return <span style={{color:'#ccc', marginLeft:4}}>↕</span>;
+    return <span style={{marginLeft:4}}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
+
   const types = [...new Set(objects.map(o => o.type).filter(Boolean))];
   const floors = [...new Set(objects.map(o => o.floor).filter(Boolean))].sort((a,b)=>a-b);
 
@@ -50,6 +66,17 @@ export default function Objects({ onNavigate, highlightId }) {
     if (filterType && o.type !== filterType) return false;
     if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
     return true;
+  }).sort((a, b) => {
+    let va = a[sortField];
+    let vb = b[sortField];
+    if (va === null || va === undefined) va = '';
+    if (vb === null || vb === undefined) vb = '';
+    if (typeof va === 'number' && typeof vb === 'number') {
+      return sortDir === 'asc' ? va - vb : vb - va;
+    }
+    return sortDir === 'asc'
+      ? String(va).localeCompare(String(vb), 'ru')
+      : String(vb).localeCompare(String(va), 'ru');
   });
 
   const rented = objects.filter(o => o.status === 'Сдано');
@@ -102,6 +129,13 @@ export default function Objects({ onNavigate, highlightId }) {
     );
   }
 
+  function formatDateTime(dt) {
+    if (!dt) return '—';
+    const d = new Date(dt);
+    return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+  }
+
+  const thStyle = {cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'};
   const getTenant = (id) => tenants.find(t => t.object_id === id);
 
   return (
@@ -157,19 +191,19 @@ export default function Objects({ onNavigate, highlightId }) {
           <table>
             <thead>
               <tr>
-                <th>Название</th>
-                <th>Тип</th>
-                <th>Статус</th>
-                <th>Этаж</th>
-                <th>Площадь</th>
+                <th style={thStyle} onClick={() => handleSort('name')}>Название{sortIcon('name')}</th>
+                <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
+                <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
+                <th style={thStyle} onClick={() => handleSort('floor')}>Этаж{sortIcon('floor')}</th>
+                <th style={thStyle} onClick={() => handleSort('area')}>Площадь{sortIcon('area')}</th>
                 <th>Арендатор</th>
-                <th>₽/мес</th>
-                <th>Коммуналка ₽</th>
+                <th style={thStyle} onClick={() => handleSort('rent')}>₽/мес{sortIcon('rent')}</th>
+                <th style={thStyle} onClick={() => handleSort('utility_cost')}>Коммуналка ₽{sortIcon('utility_cost')}</th>
                 <th>Вид коммуналки</th>
-                <th>Оплата</th>
+                <th style={thStyle} onClick={() => handleSort('payment')}>Оплата{sortIcon('payment')}</th>
                 <th>Совместное</th>
                 <th>Комментарии</th>
-                <th>Изменён</th>
+                <th style={thStyle} onClick={() => handleSort('updated_at')}>Изменён{sortIcon('updated_at')}</th>
               </tr>
             </thead>
             <tbody>
@@ -262,7 +296,7 @@ export default function Objects({ onNavigate, highlightId }) {
                       )}
                     </td>
                     <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>
-                      {o.updated_at ? new Date(o.updated_at).toLocaleDateString('ru-RU') : '—'}
+                      {formatDateTime(o.updated_at)}
                     </td>
                   </tr>
                 );
@@ -290,7 +324,7 @@ export default function Objects({ onNavigate, highlightId }) {
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
             <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Изменён</div><div className="detail-val">{selected.updated_at ? new Date(selected.updated_at).toLocaleDateString('ru-RU') : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Изменён</div><div className="detail-val">{formatDateTime(selected.updated_at)}</div></div>
             {getTenant(selected.id) && (
               <div className="linked-section">
                 <div className="linked-title">Арендатор</div>
