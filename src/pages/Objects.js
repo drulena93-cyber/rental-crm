@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
+async function dbQuery(sql, params = []) {
+  const res = await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: sql, params })
+  });
+  const data = await res.json();
+  return data.rows || [];
+}
+
 export default function Objects({ onNavigate, highlightId }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [objectTenants, setObjectTenants] = useState([]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterFloor, setFilterFloor] = useState('');
@@ -21,6 +32,10 @@ export default function Objects({ onNavigate, highlightId }) {
   const [noteValue, setNoteValue] = useState('');
   const [sortField, setSortField] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
+  const [showTenantsModal, setShowTenantsModal] = useState(false);
+  const [selectedObjectForTenants, setSelectedObjectForTenants] = useState(null);
+  const [objectTenantsList, setObjectTenantsList] = useState([]);
+  const [addingTenant, setAddingTenant] = useState('');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -36,10 +51,61 @@ export default function Objects({ onNavigate, highlightId }) {
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
     const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
     const { data: noteData } = await supabase.from('settings').select('value').eq('id', 'objects_note').single();
+    const ot = await dbQuery(`
+      SELECT ot.*, t.name as tenant_name 
+      FROM object_tenants ot 
+      JOIN tenants t ON t.id = ot.tenant_id 
+      WHERE t.deleted_at IS NULL
+    `);
     setObjects(objs || []);
     setTenants(tens || []);
+    setObjectTenants(ot || []);
     setNote(noteData?.value || '');
     setLoading(false);
+  }
+
+  async function fetchObjectTenants(objectId) {
+    const rows = await dbQuery(`
+      SELECT ot.*, t.name as tenant_name 
+      FROM object_tenants ot 
+      JOIN tenants t ON t.id = ot.tenant_id 
+      WHERE ot.object_id = $1 AND t.deleted_at IS NULL
+      ORDER BY ot.is_primary DESC, t.name ASC
+    `, [objectId]);
+    setObjectTenantsList(rows);
+  }
+
+  function openTenantsModal(o) {
+    setSelectedObjectForTenants(o);
+    setShowTenantsModal(true);
+    fetchObjectTenants(o.id);
+    setAddingTenant('');
+  }
+
+  async function addTenantToObject(tenantId) {
+    if (!tenantId) return;
+    await dbQuery(`
+      INSERT INTO object_tenants (object_id, tenant_id, is_primary)
+      VALUES ($1, $2, false)
+      ON CONFLICT DO NOTHING
+    `, [selectedObjectForTenants.id, tenantId]);
+    await fetchObjectTenants(selectedObjectForTenants.id);
+    await fetchAll();
+    setAddingTenant('');
+  }
+
+  async function removeTenantFromObject(id) {
+    if (!window.confirm('Убрать арендатора с объекта?')) return;
+    await dbQuery(`DELETE FROM object_tenants WHERE id = $1`, [id]);
+    await fetchObjectTenants(selectedObjectForTenants.id);
+    await fetchAll();
+  }
+
+  async function setPrimaryTenant(id) {
+    await dbQuery(`UPDATE object_tenants SET is_primary = false WHERE object_id = $1`, [selectedObjectForTenants.id]);
+    await dbQuery(`UPDATE object_tenants SET is_primary = true WHERE id = $1`, [id]);
+    await fetchObjectTenants(selectedObjectForTenants.id);
+    await fetchAll();
   }
 
   function handleSort(field) {
@@ -81,6 +147,10 @@ export default function Objects({ onNavigate, highlightId }) {
 
   const rented = objects.filter(o => o.status === 'Сдано');
   const free = objects.filter(o => o.status === 'Не сдано');
+
+  function getObjectTenants(objectId) {
+    return objectTenants.filter(ot => ot.object_id === objectId);
+  }
 
   async function quickUpdate(id, field, value) {
     const now = new Date().toISOString();
@@ -136,7 +206,6 @@ export default function Objects({ onNavigate, highlightId }) {
   }
 
   const thStyle = {cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'};
-  const getTenant = (id) => tenants.find(t => t.object_id === id);
 
   return (
     <div>
@@ -196,7 +265,7 @@ export default function Objects({ onNavigate, highlightId }) {
                 <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
                 <th style={thStyle} onClick={() => handleSort('floor')}>Этаж{sortIcon('floor')}</th>
                 <th style={thStyle} onClick={() => handleSort('area')}>Площадь{sortIcon('area')}</th>
-                <th>Арендатор</th>
+                <th>Арендаторы</th>
                 <th style={thStyle} onClick={() => handleSort('rent')}>₽/мес{sortIcon('rent')}</th>
                 <th style={thStyle} onClick={() => handleSort('utility_cost')}>Коммуналка ₽{sortIcon('utility_cost')}</th>
                 <th>Вид коммуналки</th>
@@ -208,7 +277,8 @@ export default function Objects({ onNavigate, highlightId }) {
             </thead>
             <tbody>
               {filtered.map(o => {
-                const t = getTenant(o.id);
+                const ots = getObjectTenants(o.id);
+                const primary = ots.find(t => t.is_primary);
                 return (
                   <tr key={o.id} onClick={() => setSelected(o)}>
                     <td>{o.name}</td>
@@ -226,8 +296,22 @@ export default function Objects({ onNavigate, highlightId }) {
                     </td>
                     <td>{o.floor || '—'}</td>
                     <td>{o.area ? `${o.area} м²` : '—'}</td>
-                    <td onClick={e => { e.stopPropagation(); if(t) onNavigate('tenants', t.id); }}>
-                      {t ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>{t.name}</span> : <span style={{color:'#aaa'}}>—</span>}
+                    <td onClick={e => e.stopPropagation()}>
+                      <div style={{display:'flex', flexDirection:'column', gap:2}}>
+                        {ots.length === 0 && <span style={{color:'#aaa'}}>—</span>}
+                        {ots.map(ot => (
+                          <span key={ot.id}
+                            style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline', fontSize:12, display:'flex', alignItems:'center', gap:4}}
+                            onClick={() => onNavigate('tenants', ot.tenant_id)}>
+                            {ot.is_primary && <span style={{color:'#f59e0b', fontSize:10}}>★</span>}
+                            {ot.tenant_name}
+                          </span>
+                        ))}
+                        <span style={{color:'#534AB7', cursor:'pointer', fontSize:11, marginTop:2}}
+                          onClick={() => openTenantsModal(o)}>
+                          ✎ изменить
+                        </span>
+                      </div>
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       {editingField === o.id+'_rent' ? (
@@ -307,6 +391,73 @@ export default function Objects({ onNavigate, highlightId }) {
       )}
       <div className="page-info">Показано {filtered.length} из {objects.length}</div>
 
+      {/* Модалка управления арендаторами объекта */}
+      {showTenantsModal && selectedObjectForTenants && (
+        <div className="modal-overlay" onClick={() => setShowTenantsModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">
+              👥 Арендаторы — {selectedObjectForTenants.name}
+              <button className="modal-close" onClick={() => setShowTenantsModal(false)}>✕ Закрыть</button>
+            </div>
+
+            {objectTenantsList.length === 0 ? (
+              <div style={{color:'#aaa', textAlign:'center', padding:20}}>Арендаторы не привязаны</div>
+            ) : (
+              <table style={{marginBottom:16}}>
+                <thead>
+                  <tr>
+                    <th>Арендатор</th>
+                    <th>Главный</th>
+                    <th style={{width:80}}>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {objectTenantsList.map(ot => (
+                    <tr key={ot.id}>
+                      <td>
+                        <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
+                          onClick={() => { setShowTenantsModal(false); onNavigate('tenants', ot.tenant_id); }}>
+                          {ot.tenant_name}
+                        </span>
+                      </td>
+                      <td>
+                        {ot.is_primary
+                          ? <span style={{color:'#f59e0b', fontWeight:500}}>★ Главный</span>
+                          : <button onClick={() => setPrimaryTenant(ot.id)}
+                              style={{background:'none', border:'1px solid #ddd', borderRadius:4, padding:'2px 8px', cursor:'pointer', fontSize:12}}>
+                              Сделать главным
+                            </button>
+                        }
+                      </td>
+                      <td>
+                        <button onClick={() => removeTenantFromObject(ot.id)}
+                          style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <div style={{display:'flex', gap:8, alignItems:'center'}}>
+              <select value={addingTenant} onChange={e => setAddingTenant(e.target.value)}
+                style={{flex:1, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
+                <option value="">— Выберите арендатора —</option>
+                {tenants
+                  .filter(t => !objectTenantsList.find(ot => ot.tenant_id === t.id))
+                  .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <button className="btn-save" onClick={() => addTenantToObject(addingTenant)}
+                disabled={!addingTenant}>
+                + Добавить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selected && (
         <div className="modal-overlay" onClick={() => setSelected(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -325,15 +476,25 @@ export default function Objects({ onNavigate, highlightId }) {
             <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Изменён</div><div className="detail-val">{formatDateTime(selected.updated_at)}</div></div>
-            {getTenant(selected.id) && (
-              <div className="linked-section">
-                <div className="linked-title">Арендатор</div>
-                <div className="linked-item" style={{cursor:'pointer', color:'#534AB7'}}
-                  onClick={() => { setSelected(null); onNavigate('tenants', getTenant(selected.id).id); }}>
-                  → {getTenant(selected.id).name}
-                </div>
+            <div className="linked-section">
+              <div className="linked-title">Арендаторы</div>
+              {getObjectTenants(selected.id).length === 0
+                ? <div style={{color:'#aaa', fontSize:13}}>Не привязаны</div>
+                : getObjectTenants(selected.id).map(ot => (
+                  <div key={ot.id} className="linked-item" style={{cursor:'pointer', color:'#534AB7', display:'flex', alignItems:'center', gap:6}}
+                    onClick={() => { setSelected(null); onNavigate('tenants', ot.tenant_id); }}>
+                    {ot.is_primary && <span style={{color:'#f59e0b'}}>★</span>}
+                    → {ot.tenant_name}
+                  </div>
+                ))
+              }
+              <div style={{marginTop:8}}>
+                <button style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'6px 12px', fontSize:12, cursor:'pointer'}}
+                  onClick={() => { setSelected(null); openTenantsModal(selected); }}>
+                  ✎ Управлять арендаторами
+                </button>
               </div>
-            )}
+            </div>
             <div className="form-actions">
               <button className="btn-cancel" onClick={() => deleteObj(selected.id)}>В корзину</button>
               <button className="btn-save" onClick={() => openEdit(selected)}>Редактировать</button>
