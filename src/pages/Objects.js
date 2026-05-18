@@ -11,6 +11,150 @@ async function dbQuery(sql, params = []) {
   return data.rows || [];
 }
 
+function HistorySection({ objectId, tenants, onNavigate }) {
+  const [history, setHistory] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState({ tenant_id: '', tenant_name: '', date_from: '', date_to: '', comment: '' });
+
+  useEffect(() => { fetchHistory(); }, [objectId]);
+
+  async function fetchHistory() {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT * FROM object_history WHERE object_id = $1 ORDER BY date_to DESC NULLS FIRST`,
+        params: [objectId]
+      })
+    });
+    const data = await res.json();
+    setHistory(data.rows || []);
+  }
+
+  async function addHistory() {
+    if (!form.tenant_name && !form.tenant_id) return alert('Укажите арендатора');
+    const tenantName = form.tenant_id
+      ? tenants.find(t => t.id === form.tenant_id)?.name || form.tenant_name
+      : form.tenant_name;
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto)
+                VALUES ($1, $2, $3, $4, $5, $6, false)`,
+        params: [objectId, form.tenant_id || null, tenantName, form.date_from || null, form.date_to || null, form.comment || null]
+      })
+    });
+    setShowAddForm(false);
+    setForm({ tenant_id: '', tenant_name: '', date_from: '', date_to: '', comment: '' });
+    fetchHistory();
+  }
+
+  async function deleteHistory(id) {
+    if (!window.confirm('Удалить запись?')) return;
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `DELETE FROM object_history WHERE id = $1`, params: [id] })
+    });
+    fetchHistory();
+  }
+
+  return (
+    <div className="linked-section">
+      <div className="linked-title" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <span>📋 История объекта</span>
+        <button onClick={() => setShowAddForm(!showAddForm)}
+          style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>
+          + Добавить
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div style={{background:'#f8f8f8', borderRadius:8, padding:12, marginBottom:12}}>
+          <div style={{marginBottom:8}}>
+            <label style={{fontSize:12, color:'#888'}}>Арендатор из списка</label>
+            <select value={form.tenant_id} onChange={e => setForm({...form, tenant_id: e.target.value})}
+              style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4}}>
+              <option value="">— Выберите или введите вручную —</option>
+              {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          {!form.tenant_id && (
+            <div style={{marginBottom:8}}>
+              <label style={{fontSize:12, color:'#888'}}>Или введите имя вручную</label>
+              <input value={form.tenant_name} onChange={e => setForm({...form, tenant_name: e.target.value})}
+                placeholder="ФИО / название"
+                style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4, boxSizing:'border-box'}} />
+            </div>
+          )}
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8}}>
+            <div>
+              <label style={{fontSize:12, color:'#888'}}>Дата с</label>
+              <input type="date" value={form.date_from} onChange={e => setForm({...form, date_from: e.target.value})}
+                style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4}} />
+            </div>
+            <div>
+              <label style={{fontSize:12, color:'#888'}}>Дата по</label>
+              <input type="date" value={form.date_to} onChange={e => setForm({...form, date_to: e.target.value})}
+                style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4}} />
+            </div>
+          </div>
+          <div style={{marginBottom:8}}>
+            <label style={{fontSize:12, color:'#888'}}>Комментарий</label>
+            <input value={form.comment} onChange={e => setForm({...form, comment: e.target.value})}
+              placeholder="Комментарий..."
+              style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4, boxSizing:'border-box'}} />
+          </div>
+          <div style={{display:'flex', gap:8}}>
+            <button className="btn-save" onClick={addHistory}>Сохранить</button>
+            <button className="btn-cancel" onClick={() => setShowAddForm(false)}>Отмена</button>
+          </div>
+        </div>
+      )}
+
+      {history.length === 0 ? (
+        <div style={{color:'#aaa', fontSize:13, padding:'8px 0'}}>История пуста</div>
+      ) : (
+        <table style={{fontSize:12}}>
+          <thead>
+            <tr>
+              <th>Арендатор</th>
+              <th>С</th>
+              <th>По</th>
+              <th>Комментарий</th>
+              <th style={{width:40}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map(h => (
+              <tr key={h.id}>
+                <td>
+                  {h.tenant_id
+                    ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
+                        onClick={() => onNavigate('tenants', h.tenant_id)}>
+                        {h.tenant_name}
+                        {h.auto && <span style={{color:'#aaa', fontSize:10, marginLeft:4}}>(авто)</span>}
+                      </span>
+                    : <span>{h.tenant_name}</span>
+                  }
+                </td>
+                <td>{h.date_from ? new Date(h.date_from).toLocaleDateString('ru-RU') : '—'}</td>
+                <td>{h.date_to ? new Date(h.date_to).toLocaleDateString('ru-RU') : '—'}</td>
+                <td style={{maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={h.comment}>{h.comment || '—'}</td>
+                <td>
+                  <button onClick={() => deleteHistory(h.id)}
+                    style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:12}}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 export default function Objects({ onNavigate, highlightId }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
@@ -84,11 +228,8 @@ export default function Objects({ onNavigate, highlightId }) {
 
   async function addTenantToObject(tenantId) {
     if (!tenantId) return;
-    await dbQuery(`
-      INSERT INTO object_tenants (object_id, tenant_id, is_primary)
-      VALUES ($1, $2, false)
-      ON CONFLICT DO NOTHING
-    `, [selectedObjectForTenants.id, tenantId]);
+    await dbQuery(`INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`,
+      [selectedObjectForTenants.id, tenantId]);
     await fetchObjectTenants(selectedObjectForTenants.id);
     await fetchAll();
     setAddingTenant('');
@@ -109,12 +250,8 @@ export default function Objects({ onNavigate, highlightId }) {
   }
 
   function handleSort(field) {
-    if (sortField === field) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDir('asc');
-    }
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
   }
 
   function sortIcon(field) {
@@ -133,24 +270,15 @@ export default function Objects({ onNavigate, highlightId }) {
     if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
     return true;
   }).sort((a, b) => {
-    let va = a[sortField];
-    let vb = b[sortField];
-    if (va === null || va === undefined) va = '';
-    if (vb === null || vb === undefined) vb = '';
-    if (typeof va === 'number' && typeof vb === 'number') {
-      return sortDir === 'asc' ? va - vb : vb - va;
-    }
-    return sortDir === 'asc'
-      ? String(va).localeCompare(String(vb), 'ru')
-      : String(vb).localeCompare(String(va), 'ru');
+    let va = a[sortField], vb = b[sortField];
+    if (va == null) va = ''; if (vb == null) vb = '';
+    if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
+    return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
   });
 
   const rented = objects.filter(o => o.status === 'Сдано');
   const free = objects.filter(o => o.status === 'Не сдано');
-
-  function getObjectTenants(objectId) {
-    return objectTenants.filter(ot => ot.object_id === objectId);
-  }
+  const getObjectTenants = (id) => objectTenants.filter(ot => ot.object_id === id);
 
   async function quickUpdate(id, field, value) {
     const now = new Date().toISOString();
@@ -159,25 +287,14 @@ export default function Objects({ onNavigate, highlightId }) {
     setEditingField(null);
   }
 
-  function openAdd() {
-    setForm({ status: 'Не сдано', shared: false });
-    setShowForm(true);
-  }
-
-  function openEdit(o) {
-    setForm({ ...o });
-    setShowForm(true);
-    setSelected(null);
-  }
+  function openAdd() { setForm({ status: 'Не сдано', shared: false }); setShowForm(true); }
+  function openEdit(o) { setForm({ ...o }); setShowForm(true); setSelected(null); }
 
   async function saveForm() {
     if (!form.name) return alert('Введите название объекта');
     const now = new Date().toISOString();
-    if (form.id) {
-      await supabase.from('objects').update({ ...form, updated_at: now }).eq('id', form.id);
-    } else {
-      await supabase.from('objects').insert({ ...form, updated_at: now });
-    }
+    if (form.id) await supabase.from('objects').update({ ...form, updated_at: now }).eq('id', form.id);
+    else await supabase.from('objects').insert({ ...form, updated_at: now });
     setShowForm(false);
     fetchAll();
   }
@@ -192,11 +309,7 @@ export default function Objects({ onNavigate, highlightId }) {
   function statusBadge(o) {
     const s = o.status;
     const cls = s === 'Сдано' ? 'badge-green' : s === 'Не сдано' ? 'badge-red' : s === 'Освобождается с 1 числа' ? 'badge-amber' : 'badge-gray';
-    return (
-      <span className={`badge ${cls}`} style={{cursor:'pointer'}} onClick={e => { e.stopPropagation(); setEditingStatus(o.id); }}>
-        {s} ▾
-      </span>
-    );
+    return <span className={`badge ${cls}`} style={{cursor:'pointer'}} onClick={e => { e.stopPropagation(); setEditingStatus(o.id); }}>{s} ▾</span>;
   }
 
   function formatDateTime(dt) {
@@ -233,11 +346,7 @@ export default function Objects({ onNavigate, highlightId }) {
         <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Все статусы</option>
-          <option>Сдано</option>
-          <option>Не сдано</option>
-          <option>Освобождается с 1 числа</option>
-          <option>Не учитывать</option>
-          <option>Не указано</option>
+          <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
         </select>
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">Все типы</option>
@@ -249,8 +358,7 @@ export default function Objects({ onNavigate, highlightId }) {
         </select>
         <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
           <option value="">Совместное: все</option>
-          <option value="да">Да</option>
-          <option value="нет">Нет</option>
+          <option value="да">Да</option><option value="нет">Нет</option>
         </select>
         <button className="btn-add" onClick={openAdd}>+ Добавить объект</button>
       </div>
@@ -278,7 +386,6 @@ export default function Objects({ onNavigate, highlightId }) {
             <tbody>
               {filtered.map(o => {
                 const ots = getObjectTenants(o.id);
-                const primary = ots.find(t => t.is_primary);
                 return (
                   <tr key={o.id} onClick={() => setSelected(o)}>
                     <td>{o.name}</td>
@@ -286,11 +393,7 @@ export default function Objects({ onNavigate, highlightId }) {
                     <td onClick={e => e.stopPropagation()}>
                       {editingStatus === o.id ? (
                         <select autoFocus value={o.status||''} onChange={e => { quickUpdate(o.id, 'status', e.target.value); setEditingStatus(null); }} onBlur={() => setEditingStatus(null)}>
-                          <option>Сдано</option>
-                          <option>Не сдано</option>
-                          <option>Освобождается с 1 числа</option>
-                          <option>Не учитывать</option>
-                          <option>Не указано</option>
+                          <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
                         </select>
                       ) : statusBadge(o)}
                     </td>
@@ -300,23 +403,18 @@ export default function Objects({ onNavigate, highlightId }) {
                       <div style={{display:'flex', flexDirection:'column', gap:2}}>
                         {ots.length === 0 && <span style={{color:'#aaa'}}>—</span>}
                         {ots.map(ot => (
-                          <span key={ot.id}
-                            style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline', fontSize:12, display:'flex', alignItems:'center', gap:4}}
+                          <span key={ot.id} style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline', fontSize:12, display:'flex', alignItems:'center', gap:4}}
                             onClick={() => onNavigate('tenants', ot.tenant_id)}>
                             {ot.is_primary && <span style={{color:'#f59e0b', fontSize:10}}>★</span>}
                             {ot.tenant_name}
                           </span>
                         ))}
-                        <span style={{color:'#534AB7', cursor:'pointer', fontSize:11, marginTop:2}}
-                          onClick={() => openTenantsModal(o)}>
-                          ✎ изменить
-                        </span>
+                        <span style={{color:'#534AB7', cursor:'pointer', fontSize:11, marginTop:2}} onClick={() => openTenantsModal(o)}>✎ изменить</span>
                       </div>
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       {editingField === o.id+'_rent' ? (
-                        <input autoFocus type="number" value={editingValue}
-                          onChange={e => setEditingValue(e.target.value)}
+                        <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
                           onBlur={() => quickUpdate(o.id, 'rent', parseFloat(editingValue))}
                           onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'rent', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
                           style={{width:90}} />
@@ -328,8 +426,7 @@ export default function Objects({ onNavigate, highlightId }) {
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       {editingField === o.id+'_utility' ? (
-                        <input autoFocus type="number" value={editingValue}
-                          onChange={e => setEditingValue(e.target.value)}
+                        <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
                           onBlur={() => quickUpdate(o.id, 'utility_cost', parseFloat(editingValue))}
                           onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'utility_cost', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
                           style={{width:90}} />
@@ -343,14 +440,12 @@ export default function Objects({ onNavigate, highlightId }) {
                       <select value={o.utility_type||''} onChange={e => quickUpdate(o.id, 'utility_type', e.target.value)}
                         style={{fontSize:12, border:'1px solid #ddd', borderRadius:4, padding:'2px 4px'}}>
                         <option value="">Не указано</option>
-                        <option>Фиксированная</option>
-                        <option>По счётчику</option>
+                        <option>Фиксированная</option><option>По счётчику</option>
                       </select>
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       {editingField === o.id+'_payment' ? (
-                        <input autoFocus value={editingValue}
-                          onChange={e => setEditingValue(e.target.value)}
+                        <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
                           onBlur={() => quickUpdate(o.id, 'payment', editingValue)}
                           onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'payment', editingValue); if(e.key==='Escape') setEditingField(null); }}
                           style={{width:120}} />
@@ -361,27 +456,22 @@ export default function Objects({ onNavigate, highlightId }) {
                       )}
                     </td>
                     <td onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={o.shared||false}
-                        onChange={e => quickUpdate(o.id, 'shared', e.target.checked)} />
+                      <input type="checkbox" checked={o.shared||false} onChange={e => quickUpdate(o.id, 'shared', e.target.checked)} />
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       {editingField === o.id+'_comments' ? (
-                        <input autoFocus value={editingValue}
-                          onChange={e => setEditingValue(e.target.value)}
+                        <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
                           onBlur={() => quickUpdate(o.id, 'comments', editingValue)}
                           onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'comments', editingValue); if(e.key==='Escape') setEditingField(null); }}
                           style={{width:120}} />
                       ) : (
                         <span style={{cursor:'pointer', maxWidth:120, display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
-                          title={o.comments}
-                          onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
+                          title={o.comments} onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
                           {o.comments || '— ✎'}
                         </span>
                       )}
                     </td>
-                    <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>
-                      {formatDateTime(o.updated_at)}
-                    </td>
+                    <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{formatDateTime(o.updated_at)}</td>
                   </tr>
                 );
               })}
@@ -391,7 +481,6 @@ export default function Objects({ onNavigate, highlightId }) {
       )}
       <div className="page-info">Показано {filtered.length} из {objects.length}</div>
 
-      {/* Модалка управления арендаторами объекта */}
       {showTenantsModal && selectedObjectForTenants && (
         <div className="modal-overlay" onClick={() => setShowTenantsModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -399,18 +488,11 @@ export default function Objects({ onNavigate, highlightId }) {
               👥 Арендаторы — {selectedObjectForTenants.name}
               <button className="modal-close" onClick={() => setShowTenantsModal(false)}>✕ Закрыть</button>
             </div>
-
             {objectTenantsList.length === 0 ? (
               <div style={{color:'#aaa', textAlign:'center', padding:20}}>Арендаторы не привязаны</div>
             ) : (
               <table style={{marginBottom:16}}>
-                <thead>
-                  <tr>
-                    <th>Арендатор</th>
-                    <th>Главный</th>
-                    <th style={{width:80}}>Действия</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Арендатор</th><th>Главный</th><th style={{width:80}}>Действия</th></tr></thead>
                 <tbody>
                   {objectTenantsList.map(ot => (
                     <tr key={ot.id}>
@@ -431,28 +513,20 @@ export default function Objects({ onNavigate, highlightId }) {
                       </td>
                       <td>
                         <button onClick={() => removeTenantFromObject(ot.id)}
-                          style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>
-                          ✕
-                        </button>
+                          style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>✕</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-
             <div style={{display:'flex', gap:8, alignItems:'center'}}>
               <select value={addingTenant} onChange={e => setAddingTenant(e.target.value)}
                 style={{flex:1, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
                 <option value="">— Выберите арендатора —</option>
-                {tenants
-                  .filter(t => !objectTenantsList.find(ot => ot.tenant_id === t.id))
-                  .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {tenants.filter(t => !objectTenantsList.find(ot => ot.tenant_id === t.id)).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
-              <button className="btn-save" onClick={() => addTenantToObject(addingTenant)}
-                disabled={!addingTenant}>
-                + Добавить
-              </button>
+              <button className="btn-save" onClick={() => addTenantToObject(addingTenant)} disabled={!addingTenant}>+ Добавить</button>
             </div>
           </div>
         </div>
@@ -460,7 +534,7 @@ export default function Objects({ onNavigate, highlightId }) {
 
       {selected && (
         <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:680}}>
             <div className="modal-title">
               {selected.name}
               <button className="modal-close" onClick={() => setSelected(null)}>✕ Закрыть</button>
@@ -495,6 +569,7 @@ export default function Objects({ onNavigate, highlightId }) {
                 </button>
               </div>
             </div>
+            <HistorySection objectId={selected.id} tenants={tenants} onNavigate={onNavigate} />
             <div className="form-actions">
               <button className="btn-cancel" onClick={() => deleteObj(selected.id)}>В корзину</button>
               <button className="btn-save" onClick={() => openEdit(selected)}>Редактировать</button>
@@ -515,11 +590,7 @@ export default function Objects({ onNavigate, highlightId }) {
               <div className="form-group"><label>Тип</label><input value={form.type||''} onChange={e => setForm({...form, type: e.target.value})} /></div>
               <div className="form-group"><label>Статус</label>
                 <select value={form.status||''} onChange={e => setForm({...form, status: e.target.value})}>
-                  <option>Сдано</option>
-                  <option>Не сдано</option>
-                  <option>Освобождается с 1 числа</option>
-                  <option>Не учитывать</option>
-                  <option>Не указано</option>
+                  <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
                 </select>
               </div>
               <div className="form-group"><label>Этаж</label><input type="number" value={form.floor||''} onChange={e => setForm({...form, floor: parseInt(e.target.value)})} /></div>
@@ -533,9 +604,7 @@ export default function Objects({ onNavigate, highlightId }) {
               <div className="form-group"><label>Коммуналка (₽)</label><input type="number" value={form.utility_cost||''} onChange={e => setForm({...form, utility_cost: parseFloat(e.target.value)})} /></div>
               <div className="form-group"><label>Вид коммуналки</label>
                 <select value={form.utility_type||''} onChange={e => setForm({...form, utility_type: e.target.value})}>
-                  <option value="">Не указано</option>
-                  <option>Фиксированная</option>
-                  <option>По счётчику</option>
+                  <option value="">Не указано</option><option>Фиксированная</option><option>По счётчику</option>
                 </select>
               </div>
             </div>
