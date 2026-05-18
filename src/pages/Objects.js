@@ -16,9 +16,10 @@ export default function Objects({ onNavigate, highlightId }) {
   const [editingStatus, setEditingStatus] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [editingValue, setEditingValue] = useState('');
-const [note, setNote] = useState('');
-const [editingNote, setEditingNote] = useState(false);
-const [noteValue, setNoteValue] = useState('');
+  const [note, setNote] = useState('');
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteValue, setNoteValue] = useState('');
+
   useEffect(() => { fetchAll(); }, []);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ const [noteValue, setNoteValue] = useState('');
   async function fetchAll() {
     setLoading(true);
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
-   const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
+    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
     const { data: noteData } = await supabase.from('settings').select('value').eq('id', 'objects_note').single();
     setObjects(objs || []);
     setTenants(tens || []);
@@ -55,8 +56,9 @@ const [noteValue, setNoteValue] = useState('');
   const free = objects.filter(o => o.status === 'Не сдано');
 
   async function quickUpdate(id, field, value) {
-    await supabase.from('objects').update({ [field]: value }).eq('id', id);
-    setObjects(objects.map(o => o.id === id ? { ...o, [field]: value } : o));
+    const now = new Date().toISOString();
+    await supabase.from('objects').update({ [field]: value, updated_at: now }).eq('id', id);
+    setObjects(objects.map(o => o.id === id ? { ...o, [field]: value, updated_at: now } : o));
     setEditingField(null);
   }
 
@@ -73,10 +75,11 @@ const [noteValue, setNoteValue] = useState('');
 
   async function saveForm() {
     if (!form.name) return alert('Введите название объекта');
+    const now = new Date().toISOString();
     if (form.id) {
-      await supabase.from('objects').update(form).eq('id', form.id);
+      await supabase.from('objects').update({ ...form, updated_at: now }).eq('id', form.id);
     } else {
-      await supabase.from('objects').insert(form);
+      await supabase.from('objects').insert({ ...form, updated_at: now });
     }
     setShowForm(false);
     fetchAll();
@@ -108,19 +111,19 @@ const [noteValue, setNoteValue] = useState('');
         <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{rented.length}</div></div>
         <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{free.length}</div></div>
         <div className="stat" style={{cursor:'pointer'}} onClick={() => { setEditingNote(true); setNoteValue(note); }}>
-  <div className="stat-label">📝 Заметка {!editingNote && <span style={{fontSize:10,color:'#aaa'}}>✎</span>}</div>
-  {editingNote ? (
-    <textarea autoFocus value={noteValue} onChange={e => setNoteValue(e.target.value)}
-      onBlur={async () => { await supabase.from('settings').update({value: noteValue}).eq('id','objects_note'); setNote(noteValue); setEditingNote(false); }}
-      onKeyDown={e => { if(e.key==='Escape') setEditingNote(false); }}
-      style={{width:'100%',fontSize:13,border:'1px solid #ddd',borderRadius:6,padding:6,resize:'none',height:60}}
-      onClick={e => e.stopPropagation()} />
-  ) : (
-    <div style={{fontSize:13,color:note?'#1a1a1a':'#aaa',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
-      {note || 'Нажмите чтобы добавить заметку...'}
-    </div>
-  )}
-</div>
+          <div className="stat-label">📝 Заметка {!editingNote && <span style={{fontSize:10,color:'#aaa'}}>✎</span>}</div>
+          {editingNote ? (
+            <textarea autoFocus value={noteValue} onChange={e => setNoteValue(e.target.value)}
+              onBlur={async () => { await supabase.from('settings').update({value: noteValue}).eq('id','objects_note'); setNote(noteValue); setEditingNote(false); }}
+              onKeyDown={e => { if(e.key==='Escape') setEditingNote(false); }}
+              style={{width:'100%',fontSize:13,border:'1px solid #ddd',borderRadius:6,padding:6,resize:'none',height:60}}
+              onClick={e => e.stopPropagation()} />
+          ) : (
+            <div style={{fontSize:13,color:note?'#1a1a1a':'#aaa',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
+              {note || 'Нажмите чтобы добавить заметку...'}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="toolbar">
@@ -151,105 +154,121 @@ const [noteValue, setNoteValue] = useState('');
 
       {loading ? <p>Загрузка...</p> : (
         <div style={{overflowX:'auto'}}>
-        <table>
-          <thead>
-            <tr>
-              <th>Название</th>
-              <th>Тип</th>
-              <th>Статус</th>
-              <th>Этаж</th>
-              <th>Площадь</th>
-              <th>Арендатор</th>
-              <th>₽/мес</th>
-              <th>Оплата</th>
-              <th>Коммуналка ₽</th>
-              <th>Вид коммуналки</th>
-              <th>Совместное</th>
-              <th>Комментарии</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(o => {
-              const t = getTenant(o.id);
-              return (
-                <tr key={o.id} onClick={() => setSelected(o)}>
-                  <td>{o.name}</td>
-                  <td>{o.type}</td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {editingStatus === o.id ? (
-                      <select autoFocus value={o.status||''} onChange={e => { quickUpdate(o.id, 'status', e.target.value); setEditingStatus(null); }} onBlur={() => setEditingStatus(null)}>
-                        <option>Сдано</option>
-                        <option>Не сдано</option>
-                        <option>Освобождается с 1 числа</option>
-                        <option>Не учитывать</option>
-                        <option>Не указано</option>
+          <table>
+            <thead>
+              <tr>
+                <th>Название</th>
+                <th>Тип</th>
+                <th>Статус</th>
+                <th>Этаж</th>
+                <th>Площадь</th>
+                <th>Арендатор</th>
+                <th>₽/мес</th>
+                <th>Коммуналка ₽</th>
+                <th>Вид коммуналки</th>
+                <th>Оплата</th>
+                <th>Совместное</th>
+                <th>Комментарии</th>
+                <th>Изменён</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(o => {
+                const t = getTenant(o.id);
+                return (
+                  <tr key={o.id} onClick={() => setSelected(o)}>
+                    <td>{o.name}</td>
+                    <td>{o.type}</td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {editingStatus === o.id ? (
+                        <select autoFocus value={o.status||''} onChange={e => { quickUpdate(o.id, 'status', e.target.value); setEditingStatus(null); }} onBlur={() => setEditingStatus(null)}>
+                          <option>Сдано</option>
+                          <option>Не сдано</option>
+                          <option>Освобождается с 1 числа</option>
+                          <option>Не учитывать</option>
+                          <option>Не указано</option>
+                        </select>
+                      ) : statusBadge(o)}
+                    </td>
+                    <td>{o.floor || '—'}</td>
+                    <td>{o.area ? `${o.area} м²` : '—'}</td>
+                    <td onClick={e => { e.stopPropagation(); if(t) onNavigate('tenants', t.id); }}>
+                      {t ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>{t.name}</span> : <span style={{color:'#aaa'}}>—</span>}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {editingField === o.id+'_rent' ? (
+                        <input autoFocus type="number" value={editingValue}
+                          onChange={e => setEditingValue(e.target.value)}
+                          onBlur={() => quickUpdate(o.id, 'rent', parseFloat(editingValue))}
+                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'rent', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
+                          style={{width:90}} />
+                      ) : (
+                        <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_rent'); setEditingValue(o.rent||''); }}>
+                          {o.rent ? o.rent.toLocaleString('ru-RU')+' ₽' : '— ✎'}
+                        </span>
+                      )}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {editingField === o.id+'_utility' ? (
+                        <input autoFocus type="number" value={editingValue}
+                          onChange={e => setEditingValue(e.target.value)}
+                          onBlur={() => quickUpdate(o.id, 'utility_cost', parseFloat(editingValue))}
+                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'utility_cost', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
+                          style={{width:90}} />
+                      ) : (
+                        <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_utility'); setEditingValue(o.utility_cost||''); }}>
+                          {o.utility_cost ? o.utility_cost.toLocaleString('ru-RU')+' ₽' : '— ✎'}
+                        </span>
+                      )}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <select value={o.utility_type||''} onChange={e => quickUpdate(o.id, 'utility_type', e.target.value)}
+                        style={{fontSize:12, border:'1px solid #ddd', borderRadius:4, padding:'2px 4px'}}>
+                        <option value="">Не указано</option>
+                        <option>Фиксированная</option>
+                        <option>По счётчику</option>
                       </select>
-                    ) : statusBadge(o)}
-                  </td>
-                  <td>{o.floor || '—'}</td>
-                  <td>{o.area ? `${o.area} м²` : '—'}</td>
-                  <td onClick={e => { e.stopPropagation(); if(t) onNavigate('tenants', t.id); }}>
-                    {t ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>{t.name}</span> : <span style={{color:'#aaa'}}>—</span>}
-                  </td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {editingField === o.id+'_rent' ? (
-                      <input autoFocus type="number" value={editingValue}
-                        onChange={e => setEditingValue(e.target.value)}
-                        onBlur={() => quickUpdate(o.id, 'rent', parseFloat(editingValue))}
-                        onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'rent', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
-                        style={{width:90}} />
-                    ) : (
-                      <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_rent'); setEditingValue(o.rent||''); }}>
-                        {o.rent ? o.rent.toLocaleString('ru-RU')+' ₽' : '— ✎'}
-                      </span>
-                    )}
-                  </td>
-                  <td>{o.payment || '—'}</td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {editingField === o.id+'_utility' ? (
-                      <input autoFocus type="number" value={editingValue}
-                        onChange={e => setEditingValue(e.target.value)}
-                        onBlur={() => quickUpdate(o.id, 'utility_cost', parseFloat(editingValue))}
-                        onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'utility_cost', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
-                        style={{width:90}} />
-                    ) : (
-                      <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_utility'); setEditingValue(o.utility_cost||''); }}>
-                        {o.utility_cost ? o.utility_cost.toLocaleString('ru-RU')+' ₽' : '— ✎'}
-                      </span>
-                    )}
-                  </td>
-                  <td onClick={e => e.stopPropagation()}>
-                    <select value={o.utility_type||''} onChange={e => quickUpdate(o.id, 'utility_type', e.target.value)}
-                      style={{fontSize:12, border:'1px solid #ddd', borderRadius:4, padding:'2px 4px'}}>
-                      <option value="">Не указано</option>
-                      <option>Фиксированная</option>
-                      <option>По счётчику</option>
-                    </select>
-                  </td>
-                  <td onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" checked={o.shared||false}
-                      onChange={e => quickUpdate(o.id, 'shared', e.target.checked)} />
-                  </td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {editingField === o.id+'_comments' ? (
-                      <input autoFocus value={editingValue}
-                        onChange={e => setEditingValue(e.target.value)}
-                        onBlur={() => quickUpdate(o.id, 'comments', editingValue)}
-                        onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'comments', editingValue); if(e.key==='Escape') setEditingField(null); }}
-                        style={{width:120}} />
-                    ) : (
-                      <span style={{cursor:'pointer', maxWidth:120, display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
-                        title={o.comments}
-                        onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
-                        {o.comments || '— ✎'}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {editingField === o.id+'_payment' ? (
+                        <input autoFocus value={editingValue}
+                          onChange={e => setEditingValue(e.target.value)}
+                          onBlur={() => quickUpdate(o.id, 'payment', editingValue)}
+                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'payment', editingValue); if(e.key==='Escape') setEditingField(null); }}
+                          style={{width:120}} />
+                      ) : (
+                        <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_payment'); setEditingValue(o.payment||''); }}>
+                          {o.payment || '— ✎'}
+                        </span>
+                      )}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={o.shared||false}
+                        onChange={e => quickUpdate(o.id, 'shared', e.target.checked)} />
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {editingField === o.id+'_comments' ? (
+                        <input autoFocus value={editingValue}
+                          onChange={e => setEditingValue(e.target.value)}
+                          onBlur={() => quickUpdate(o.id, 'comments', editingValue)}
+                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'comments', editingValue); if(e.key==='Escape') setEditingField(null); }}
+                          style={{width:120}} />
+                      ) : (
+                        <span style={{cursor:'pointer', maxWidth:120, display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
+                          title={o.comments}
+                          onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
+                          {o.comments || '— ✎'}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>
+                      {o.updated_at ? new Date(o.updated_at).toLocaleDateString('ru-RU') : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
       <div className="page-info">Показано {filtered.length} из {objects.length}</div>
@@ -265,13 +284,13 @@ const [noteValue, setNoteValue] = useState('');
             <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{selected.type||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Этаж</div><div className="detail-val">{selected.floor||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Площадь</div><div className="detail-val">{selected.area ? `${selected.area} м²` : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Стоимость/мес</div><div className="detail-val">{selected.rent ? selected.rent.toLocaleString('ru-RU')+' ₽' : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">₽/мес</div><div className="detail-val">{selected.rent ? selected.rent.toLocaleString('ru-RU')+' ₽' : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Коммуналка</div><div className="detail-val">{selected.utility_cost ? selected.utility_cost.toLocaleString('ru-RU')+' ₽' : '—'} {selected.utility_type ? `(${selected.utility_type})` : ''}</div></div>
             <div className="detail-row"><div className="detail-key">Оплата помещения</div><div className="detail-val">{selected.payment||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Стоимость коммуналки</div><div className="detail-val">{selected.utility_cost ? selected.utility_cost.toLocaleString('ru-RU')+' ₽' : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Вид коммуналки</div><div className="detail-val">{selected.utility_type||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
             <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments||'—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Изменён</div><div className="detail-val">{selected.updated_at ? new Date(selected.updated_at).toLocaleDateString('ru-RU') : '—'}</div></div>
             {getTenant(selected.id) && (
               <div className="linked-section">
                 <div className="linked-title">Арендатор</div>
@@ -311,15 +330,12 @@ const [noteValue, setNoteValue] = useState('');
               <div className="form-group"><label>Этаж</label><input type="number" value={form.floor||''} onChange={e => setForm({...form, floor: parseInt(e.target.value)})} /></div>
               <div className="form-group"><label>Номер офиса</label><input value={form.office||''} onChange={e => setForm({...form, office: e.target.value})} /></div>
               <div className="form-group"><label>Площадь (м²)</label><input type="number" value={form.area||''} onChange={e => setForm({...form, area: parseFloat(e.target.value)})} /></div>
-              <div className="form-group"><label>Стоимость/мес (₽)</label><input type="number" value={form.rent||''} onChange={e => setForm({...form, rent: parseFloat(e.target.value)})} /></div>
+              <div className="form-group"><label>₽/мес</label><input type="number" value={form.rent||''} onChange={e => setForm({...form, rent: parseFloat(e.target.value)})} /></div>
               <div className="form-group"><label>Страховой взнос (₽)</label><input type="number" value={form.insurance||''} onChange={e => setForm({...form, insurance: parseFloat(e.target.value)})} /></div>
               <div className="form-group"><label>Оплата помещения</label>
-                <select value={form.payment||''} onChange={e => setForm({...form, payment: e.target.value})}>
-                  <option value="">Не указана</option>
-                  <option>с 25 по 05</option><option>с 1 по 10</option><option>с 5 по 15</option>
-                </select>
+                <input value={form.payment||''} onChange={e => setForm({...form, payment: e.target.value})} placeholder="например: с 25 по 05 числа" />
               </div>
-              <div className="form-group"><label>Стоимость коммуналки (₽)</label><input type="number" value={form.utility_cost||''} onChange={e => setForm({...form, utility_cost: parseFloat(e.target.value)})} /></div>
+              <div className="form-group"><label>Коммуналка (₽)</label><input type="number" value={form.utility_cost||''} onChange={e => setForm({...form, utility_cost: parseFloat(e.target.value)})} /></div>
               <div className="form-group"><label>Вид коммуналки</label>
                 <select value={form.utility_type||''} onChange={e => setForm({...form, utility_type: e.target.value})}>
                   <option value="">Не указано</option>
@@ -327,12 +343,6 @@ const [noteValue, setNoteValue] = useState('');
                   <option>По счётчику</option>
                 </select>
               </div>
-            </div>
-            <div className="form-group"><label>Арендатор</label>
-              <select value={form.tenant_id||''} onChange={e => setForm({...form, tenant_id: e.target.value})}>
-                <option value="">— Не назначен —</option>
-                {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
             </div>
             <div className="form-group"><label>Ссылка на Яндекс Диск</label><input value={form.yandex_link||''} onChange={e => setForm({...form, yandex_link: e.target.value})} placeholder="https://disk.yandex.ru/..." /></div>
             <div className="form-group"><label>Комментарии</label><textarea rows={2} value={form.comments||''} onChange={e => setForm({...form, comments: e.target.value})} /></div>
