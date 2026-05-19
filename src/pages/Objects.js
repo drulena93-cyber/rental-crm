@@ -40,8 +40,7 @@ function HistorySection({ objectId, tenants, onNavigate }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto)
-                VALUES ($1, $2, $3, $4, $5, $6, false)`,
+        query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, false)`,
         params: [objectId, form.tenant_id || null, tenantName, form.date_from || null, form.date_to || null, form.comment || null]
       })
     });
@@ -69,7 +68,6 @@ function HistorySection({ objectId, tenants, onNavigate }) {
           + Добавить
         </button>
       </div>
-
       {showAddForm && (
         <div style={{background:'#f8f8f8', borderRadius:8, padding:12, marginBottom:12}}>
           <div style={{marginBottom:8}}>
@@ -112,7 +110,6 @@ function HistorySection({ objectId, tenants, onNavigate }) {
           </div>
         </div>
       )}
-
       {history.length === 0 ? (
         <div style={{color:'#aaa', fontSize:13, padding:'8px 0'}}>История пуста</div>
       ) : (
@@ -131,10 +128,8 @@ function HistorySection({ objectId, tenants, onNavigate }) {
               <tr key={h.id}>
                 <td>
                   {h.tenant_id
-                    ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
-                        onClick={() => onNavigate('tenants', h.tenant_id)}>
-                        {h.tenant_name}
-                        {h.auto && <span style={{color:'#aaa', fontSize:10, marginLeft:4}}>(авто)</span>}
+                    ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}} onClick={() => onNavigate('tenants', h.tenant_id)}>
+                        {h.tenant_name}{h.auto && <span style={{color:'#aaa', fontSize:10, marginLeft:4}}>(авто)</span>}
                       </span>
                     : <span>{h.tenant_name}</span>
                   }
@@ -142,10 +137,7 @@ function HistorySection({ objectId, tenants, onNavigate }) {
                 <td>{h.date_from ? new Date(h.date_from).toLocaleDateString('ru-RU') : '—'}</td>
                 <td>{h.date_to ? new Date(h.date_to).toLocaleDateString('ru-RU') : '—'}</td>
                 <td style={{maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={h.comment}>{h.comment || '—'}</td>
-                <td>
-                  <button onClick={() => deleteHistory(h.id)}
-                    style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:12}}>✕</button>
-                </td>
+                <td><button onClick={() => deleteHistory(h.id)} style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:12}}>✕</button></td>
               </tr>
             ))}
           </tbody>
@@ -180,6 +172,8 @@ export default function Objects({ onNavigate, highlightId }) {
   const [selectedObjectForTenants, setSelectedObjectForTenants] = useState(null);
   const [objectTenantsList, setObjectTenantsList] = useState([]);
   const [addingTenant, setAddingTenant] = useState('');
+  const [showNewTenantFromObject, setShowNewTenantFromObject] = useState(false);
+  const [newTenantForm, setNewTenantForm] = useState({});
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -195,12 +189,7 @@ export default function Objects({ onNavigate, highlightId }) {
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
     const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
     const { data: noteData } = await supabase.from('settings').select('value').eq('id', 'objects_note').single();
-    const ot = await dbQuery(`
-      SELECT ot.*, t.name as tenant_name 
-      FROM object_tenants ot 
-      JOIN tenants t ON t.id = ot.tenant_id 
-      WHERE t.deleted_at IS NULL
-    `);
+    const ot = await dbQuery(`SELECT ot.*, t.name as tenant_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id WHERE t.deleted_at IS NULL`);
     setObjects(objs || []);
     setTenants(tens || []);
     setObjectTenants(ot || []);
@@ -209,13 +198,7 @@ export default function Objects({ onNavigate, highlightId }) {
   }
 
   async function fetchObjectTenants(objectId) {
-    const rows = await dbQuery(`
-      SELECT ot.*, t.name as tenant_name 
-      FROM object_tenants ot 
-      JOIN tenants t ON t.id = ot.tenant_id 
-      WHERE ot.object_id = $1 AND t.deleted_at IS NULL
-      ORDER BY ot.is_primary DESC, t.name ASC
-    `, [objectId]);
+    const rows = await dbQuery(`SELECT ot.*, t.name as tenant_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id WHERE ot.object_id = $1 AND t.deleted_at IS NULL ORDER BY ot.is_primary DESC, t.name ASC`, [objectId]);
     setObjectTenantsList(rows);
   }
 
@@ -228,8 +211,7 @@ export default function Objects({ onNavigate, highlightId }) {
 
   async function addTenantToObject(tenantId) {
     if (!tenantId) return;
-    await dbQuery(`INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`,
-      [selectedObjectForTenants.id, tenantId]);
+    await dbQuery(`INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`, [selectedObjectForTenants.id, tenantId]);
     await fetchObjectTenants(selectedObjectForTenants.id);
     await fetchAll();
     setAddingTenant('');
@@ -247,6 +229,33 @@ export default function Objects({ onNavigate, highlightId }) {
     await dbQuery(`UPDATE object_tenants SET is_primary = true WHERE id = $1`, [id]);
     await fetchObjectTenants(selectedObjectForTenants.id);
     await fetchAll();
+  }
+
+  async function saveNewTenantFromObject() {
+    if (!newTenantForm.name) return alert('Введите имя арендатора');
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `INSERT INTO tenants (name, type, status, activity, comments, object_id, shared, contract_end) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        params: [newTenantForm.name, newTenantForm.type||'ФИЗ.ЛИЦО', newTenantForm.status||'Активный', newTenantForm.activity||null, newTenantForm.comments||null, newTenantForm.object_id||null, false, newTenantForm.contract_end||null]
+      })
+    });
+    const data = await res.json();
+    const newTenantId = data.rows?.[0]?.id;
+    if (newTenantId && newTenantForm.object_id) {
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1,$2,false) ON CONFLICT DO NOTHING`,
+          params: [newTenantForm.object_id, newTenantId]
+        })
+      });
+    }
+    setShowNewTenantFromObject(false);
+    setNewTenantForm({});
+    fetchAll();
   }
 
   function handleSort(field) {
@@ -520,13 +529,57 @@ export default function Objects({ onNavigate, highlightId }) {
                 </tbody>
               </table>
             )}
-            <div style={{display:'flex', gap:8, alignItems:'center'}}>
+            <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:8}}>
               <select value={addingTenant} onChange={e => setAddingTenant(e.target.value)}
                 style={{flex:1, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
                 <option value="">— Выберите арендатора —</option>
                 {tenants.filter(t => !objectTenantsList.find(ot => ot.tenant_id === t.id)).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
               <button className="btn-save" onClick={() => addTenantToObject(addingTenant)} disabled={!addingTenant}>+ Добавить</button>
+            </div>
+            <button
+              onClick={() => { setShowTenantsModal(false); setNewTenantForm({ type: 'ФИЗ.ЛИЦО', status: 'Активный', shared: false, object_id: selectedObjectForTenants.id }); setShowNewTenantFromObject(true); }}
+              style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'7px 14px', fontSize:13, cursor:'pointer', width:'100%'}}>
+              + Создать нового арендатора и привязать к объекту
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showNewTenantFromObject && (
+        <div className="modal-overlay" onClick={() => setShowNewTenantFromObject(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">
+              Новый арендатор → {newTenantForm.object_id && objects.find(o => o.id === newTenantForm.object_id)?.name}
+              <button className="modal-close" onClick={() => setShowNewTenantFromObject(false)}>✕</button>
+            </div>
+            <div className="form-group"><label>ФИО / Название *</label>
+              <input value={newTenantForm.name||''} onChange={e => setNewTenantForm({...newTenantForm, name: e.target.value})} />
+            </div>
+            <div className="form-grid">
+              <div className="form-group"><label>Тип</label>
+                <select value={newTenantForm.type||''} onChange={e => setNewTenantForm({...newTenantForm, type: e.target.value})}>
+                  <option>ФИЗ.ЛИЦО</option><option>ЮРИД.ЛИЦО</option><option>ИП</option>
+                </select>
+              </div>
+              <div className="form-group"><label>Статус</label>
+                <select value={newTenantForm.status||''} onChange={e => setNewTenantForm({...newTenantForm, status: e.target.value})}>
+                  <option>Активный</option><option>В работе</option><option>Неактивный</option>
+                </select>
+              </div>
+              <div className="form-group"><label>Окончание договора</label>
+                <input type="date" value={newTenantForm.contract_end||''} onChange={e => setNewTenantForm({...newTenantForm, contract_end: e.target.value})} />
+              </div>
+              <div className="form-group"><label>Вид деятельности</label>
+                <input value={newTenantForm.activity||''} onChange={e => setNewTenantForm({...newTenantForm, activity: e.target.value})} />
+              </div>
+            </div>
+            <div className="form-group"><label>Комментарии</label>
+              <textarea rows={2} value={newTenantForm.comments||''} onChange={e => setNewTenantForm({...newTenantForm, comments: e.target.value})} />
+            </div>
+            <div className="form-actions">
+              <button className="btn-cancel" onClick={() => setShowNewTenantFromObject(false)}>Отмена</button>
+              <button className="btn-save" onClick={saveNewTenantFromObject}>Сохранить и привязать</button>
             </div>
           </div>
         </div>
