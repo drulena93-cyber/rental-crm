@@ -169,7 +169,12 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
       const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
       doc.render({
         номер_договора: contractForm.номер_договора || '___',
-        дата_договора: contractForm.дата_договора || '___',
+        дата_договора: (() => {
+          if (!contractForm.дата_договора) return '___';
+          const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+          const d = new Date(contractForm.дата_договора);
+          return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} г.`;
+        })(),
         арендодатель_название: org?.full_name || org?.name || '',
         арендодатель_директор: org?.director_rod || org?.director || '',
         арендодатель_основание: org?.basis || '',
@@ -181,10 +186,20 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
         арендодатель_банк: org?.bank || '',
         арендодатель_рс: org?.bank_account || '',
         арендодатель_кс: org?.corr_account || '',
+
+        // Для юрлица/ИП берём название, для физлица — ФИО
         арендатор_название: tenant?.name || '',
-        арендатор_директор: tenant?.director || '',
-        арендатор_основание: tenant?.basis || '',
-        арендатор_адрес: tenant?.passport || '',
+        // Для юрлица/ИП — директор в родительном, для физлица — ФИО в родительном
+        арендатор_директор: tenant?.type === 'ФИЗ.ЛИЦО'
+          ? (tenant?.name_rod || tenant?.name || '')
+          : (tenant?.director_rod || tenant?.director || ''),
+        арендатор_основание: tenant?.type === 'ФИЗ.ЛИЦО'
+          ? 'паспорта'
+          : (tenant?.basis || 'Устава'),
+        // Для физлица — прописка, для юрлица — юр.адрес
+        арендатор_адрес: tenant?.type === 'ФИЗ.ЛИЦО'
+          ? (tenant?.address || tenant?.passport || '')
+          : (tenant?.address_legal || ''),
         арендатор_инн: tenant?.inn || '',
         арендатор_огрн: tenant?.ogrn || '',
         арендатор_кпп: tenant?.kpp || '',
@@ -192,11 +207,15 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
         арендатор_банк: tenant?.bank || '',
         арендатор_рс: '',
         арендатор_кс: '',
+        арендатор_паспорт: tenant?.passport || '',
+        арендатор_прописка: tenant?.address || '',
+
         объект_название: objData?.name || '',
         объект_площадь: objData?.area || '',
-        объект_стоимость: objData?.rent || '',
-объект_стоимость_прописью: numberToWords(objData?.rent || 0),
+        объект_стоимость: objData?.rent ? objData.rent.toLocaleString('ru-RU') : '',
+        объект_стоимость_прописью: numberToWords(objData?.rent || 0),
         объект_этаж: objData?.floor || '',
+        объект_адрес: objData?.name || '',
       });
 
       const blob = doc.getZip().generate({
