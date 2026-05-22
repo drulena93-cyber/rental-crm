@@ -600,7 +600,7 @@ export default function Objects({ onNavigate, highlightId }) {
             <div className="detail-row"><div className="detail-key">Коммуналка</div><div className="detail-val">{selected.utility_cost ? selected.utility_cost.toLocaleString('ru-RU')+' ₽' : '—'} {selected.utility_type ? `(${selected.utility_type})` : ''}</div></div>
             <div className="detail-row"><div className="detail-key">Оплата помещения</div><div className="detail-val">{selected.payment||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
-            <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Адрес для договора</div><div className="detail-val" style={{fontSize:12}}>{selected.address||'—'}</div></div> <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Изменён</div><div className="detail-val">{formatDateTime(selected.updated_at)}</div></div>
             <div className="linked-section">
@@ -661,6 +661,10 @@ export default function Objects({ onNavigate, highlightId }) {
                 </select>
               </div>
             </div>
+                <div className="form-group"><label>Адрес для договора</label>
+  <input value={form.address||''} onChange={e => setForm({...form, address: e.target.value})}
+    placeholder="Г.САРАТОВ.УЛ.2-Я ВЫСЕЛОЧНАЯ ЗД.21стр.1. ОФ №1, 3 этаж, 21,0 кв. м." />
+</div>
             <div className="form-group"><label>Ссылка на Яндекс Диск</label><input value={form.yandex_link||''} onChange={e => setForm({...form, yandex_link: e.target.value})} placeholder="https://disk.yandex.ru/..." /></div>
             <div className="form-group"><label>Комментарии</label><textarea rows={2} value={form.comments||''} onChange={e => setForm({...form, comments: e.target.value})} /></div>
             <div className="form-group"><label><input type="checkbox" checked={form.shared||false} onChange={e => setForm({...form, shared: e.target.checked})} /> Совместное пользование</label></div>
