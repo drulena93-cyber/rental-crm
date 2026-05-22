@@ -83,7 +83,6 @@ export default function Tenants({ onNavigate, highlightId }) {
     setEditingStatus(null);
   }
 
-  // Поиск по ИНН через DaData
   async function findByInn(inn) {
     if (!inn || inn.length < 10) return alert('Введите ИНН (10 или 12 цифр)');
     setDadataLoading(true);
@@ -117,29 +116,45 @@ export default function Tenants({ onNavigate, highlightId }) {
     if (!name) return alert('Введите ФИО для склонения');
     setDeclLoading(true);
     try {
-      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/inflect/name', {
+      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/fio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
         body: JSON.stringify({ query: name, count: 1 })
       });
       const data = await res.json();
-      const genitive = data.suggestions?.find(s => s.data?.gender !== undefined)?.data;
-      if (data.suggestions?.length) {
-        // Берём родительный падеж
-        const res2 = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/inflect/name', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
-          body: JSON.stringify({ query: name, count: 1, cases: ['родительный'] })
-        });
-        const data2 = await res2.json();
-        if (data2.result) {
-          setForm(f => ({ ...f, [field]: data2.result }));
-        } else {
-          alert('Не удалось склонить. Введите вручную.');
-        }
+      if (!data.suggestions?.length) {
+        alert('ФИО не распознано. Введите родительный падеж вручную.');
+        setDeclLoading(false);
+        return;
       }
-    } catch(e) { alert('Ошибка склонения: ' + e.message); }
+      const fio = data.suggestions[0].data;
+      // Склоняем каждую часть отдельно
+      const parts = [];
+      if (fio.surname) parts.push(await declinePart(fio.surname, 'surname', fio.gender));
+      if (fio.name) parts.push(await declinePart(fio.name, 'name', fio.gender));
+      if (fio.patronymic) parts.push(await declinePart(fio.patronymic, 'patronymic', fio.gender));
+      const result = parts.filter(Boolean).join(' ');
+      if (result) {
+        setForm(f => ({ ...f, [field]: result }));
+      } else {
+        alert('Не удалось склонить. Введите вручную.');
+      }
+    } catch(e) {
+      alert('Ошибка склонения: ' + e.message);
+    }
     setDeclLoading(false);
+  }
+
+  async function declinePart(word, part, gender) {
+    try {
+      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/inflect/fio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
+        body: JSON.stringify({ query: word, parts: [part], gender: gender || 'UNKNOWN', cases: ['родительный'] })
+      });
+      const data = await res.json();
+      return data.result || word;
+    } catch(e) { return word; }
   }
 
   function openAdd() {
@@ -192,10 +207,8 @@ export default function Tenants({ onNavigate, highlightId }) {
 
   const getObject = (id) => objects.find(o => o.id === id);
   const daysLeft = (date) => { if (!date) return null; return Math.ceil((new Date(date) - today) / (1000 * 60 * 60 * 24)); };
-
   const isJuridical = form.type === 'ЮРИД.ЛИЦО' || form.type === 'ИП';
   const isFiz = form.type === 'ФИЗ.ЛИЦО';
-
   const btnStyle = {background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 10px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap', height:36};
 
   return (
@@ -297,7 +310,7 @@ export default function Tenants({ onNavigate, highlightId }) {
             <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{typeBadge(selected.type)}</div></div>
             <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{selected.status}</div></div>
             <div className="detail-row"><div className="detail-key">Вид деятельности</div><div className="detail-val">{selected.activity || '—'}</div></div>
-            {(selected.type === 'ФИЗ.ЛИЦО') && <>
+            {selected.type === 'ФИЗ.ЛИЦО' && <>
               <div className="detail-row"><div className="detail-key">Паспорт</div><div className="detail-val" style={{fontSize:12}}>{selected.passport || '—'}</div></div>
               <div className="detail-row"><div className="detail-key">Прописка</div><div className="detail-val" style={{fontSize:12}}>{selected.address || '—'}</div></div>
               <div className="detail-row"><div className="detail-key">ФИО (род. падеж)</div><div className="detail-val">{selected.name_rod || '—'}</div></div>
@@ -311,6 +324,7 @@ export default function Tenants({ onNavigate, highlightId }) {
             <div className="detail-row"><div className="detail-key">ИНН</div><div className="detail-val">{selected.inn || '—'}</div></div>
             <div className="detail-row"><div className="detail-key">ОГРН</div><div className="detail-val">{selected.ogrn || '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Банк / Р/С / К/С</div><div className="detail-val" style={{fontSize:12, whiteSpace:'pre-wrap'}}>{selected.bank || '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Начало договора</div><div className="detail-val">{selected.contract_start ? new Date(selected.contract_start).toLocaleDateString('ru-RU') : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Окончание договора</div><div className="detail-val">{selected.contract_end ? new Date(selected.contract_end).toLocaleDateString('ru-RU') : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments || '—'}</div></div>
@@ -338,7 +352,6 @@ export default function Tenants({ onNavigate, highlightId }) {
               <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
             </div>
 
-            {/* Объект — вверху */}
             <div className="form-group"><label>Объект (помещение)</label>
               <select value={form.object_id || ''} onChange={e => setForm({...form, object_id: e.target.value})}>
                 <option value="">— Не назначен —</option>
@@ -346,7 +359,6 @@ export default function Tenants({ onNavigate, highlightId }) {
               </select>
             </div>
 
-            {/* Основные поля */}
             <div className="form-group"><label>ФИО / Название *</label>
               <input value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} />
             </div>
@@ -368,14 +380,12 @@ export default function Tenants({ onNavigate, highlightId }) {
               <input value={form.activity || ''} onChange={e => setForm({...form, activity: e.target.value})} />
             </div>
 
-            {/* Поля для ФИЗ.ЛИЦА */}
             {isFiz && <>
               <div className="form-group"><label>ФИО в родительном падеже</label>
                 <div style={{display:'flex', gap:6}}>
                   <input value={form.name_rod || ''} onChange={e => setForm({...form, name_rod: e.target.value})}
                     placeholder="Иванова Ивана Ивановича" style={{flex:1}} />
-                  <button type="button" style={btnStyle}
-                    onClick={() => declineName(form.name, 'name_rod')}>
+                  <button type="button" style={btnStyle} onClick={() => declineName(form.name, 'name_rod')}>
                     {declLoading ? '...' : '📝 Склонить'}
                   </button>
                 </div>
@@ -389,11 +399,10 @@ export default function Tenants({ onNavigate, highlightId }) {
                   placeholder="Адрес регистрации" />
               </div>
               <div className="form-group"><label>ИНН</label>
-                <input value={form.inn || ''} onChange={e => setForm({...form, inn: e.target.value})} placeholder="Введите ИНН..." />
+                <input value={form.inn || ''} onChange={e => setForm({...form, inn: e.target.value})} />
               </div>
             </>}
 
-            {/* Поля для ЮРИД.ЛИЦА и ИП */}
             {isJuridical && <>
               <div className="form-group"><label>ИНН</label>
                 <div style={{display:'flex', gap:6}}>
@@ -422,23 +431,21 @@ export default function Tenants({ onNavigate, highlightId }) {
                 <div style={{display:'flex', gap:6}}>
                   <input value={form.director_rod || ''} onChange={e => setForm({...form, director_rod: e.target.value})}
                     placeholder="Иванова Ивана Ивановича" style={{flex:1}} />
-                  <button type="button" style={btnStyle}
-                    onClick={() => declineName(form.director, 'director_rod')}>
+                  <button type="button" style={btnStyle} onClick={() => declineName(form.director, 'director_rod')}>
                     {declLoading ? '...' : '📝 Склонить'}
                   </button>
                 </div>
               </div>
             </>}
 
-            {/* Общие поля */}
             <div className="form-group"><label>Банк / Р/С / К/С</label>
               <textarea rows={3} value={form.bank || ''} onChange={e => setForm({...form, bank: e.target.value})}
                 placeholder={'Банк: \nР/С: \nК/С: \nБИК: '} />
             </div>
 
             <div className="form-grid">
-              <div className="form-group"><label>Дата регистрации</label>
-                <input type="date" value={form.reg_date || ''} onChange={e => setForm({...form, reg_date: e.target.value})} />
+              <div className="form-group"><label>Дата начала договора</label>
+                <input type="date" value={form.contract_start || ''} onChange={e => setForm({...form, contract_start: e.target.value})} />
               </div>
               <div className="form-group"><label>Окончание договора</label>
                 <input type="date" value={form.contract_end || ''} onChange={e => setForm({...form, contract_end: e.target.value})} />
