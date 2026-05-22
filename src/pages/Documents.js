@@ -76,6 +76,18 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     } catch(e) {
       setTemplates([]);
     }
+    // Автозаполнение формы договора
+const lastNumRes = await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: `SELECT MAX(CAST(NULLIF(regexp_replace(name, '[^0-9]', '', 'g'), '') AS INTEGER)) as max_num FROM documents`, params: [] })
+});
+const lastNumData = await lastNumRes.json();
+const nextNum = (lastNumData.rows?.[0]?.max_num || 0) + 1;
+setContractForm({
+  номер_договора: String(nextNum),
+  дата_договора: ten?.contract_start || ''
+});
     setLoading(false);
   }
 
