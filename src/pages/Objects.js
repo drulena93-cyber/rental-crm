@@ -371,10 +371,6 @@ return true;
   <option value="">Все арендаторы</option>
   {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
 </select>              
-        <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
-  <option value="">Все арендаторы</option>
-  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-</select>
 <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
   <option value="">Совместное: все</option>
   <option value="да">Да</option><option value="нет">Нет</option>
