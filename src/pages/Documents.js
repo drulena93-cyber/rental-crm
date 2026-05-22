@@ -256,7 +256,10 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
   file_size: blob.size,
   yandex_path: result.path || '',
 });
-
+// Сохраняем дату начала договора в карточку арендатора
+if (contractForm.дата_договора) {
+  await supabase.from('tenants').update({ contract_start: contractForm.дата_договора }).eq('id', tenantId);
+}
       // Скачиваем локально
       saveAs(blob, filename);
       setShowContractForm(false);
