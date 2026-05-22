@@ -172,8 +172,9 @@ export default function Objects({ onNavigate, highlightId }) {
   const [selectedObjectForTenants, setSelectedObjectForTenants] = useState(null);
   const [objectTenantsList, setObjectTenantsList] = useState([]);
   const [addingTenant, setAddingTenant] = useState('');
-  const [showNewTenantFromObject, setShowNewTenantFromObject] = useState(false);
-  const [newTenantForm, setNewTenantForm] = useState({});
+const [showNewTenantFromObject, setShowNewTenantFromObject] = useState(false);
+const [newTenantForm, setNewTenantForm] = useState({});
+const [filterTenant, setFilterTenant] = useState('');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -277,7 +278,8 @@ export default function Objects({ onNavigate, highlightId }) {
     if (filterFloor && o.floor !== parseInt(filterFloor)) return false;
     if (filterType && o.type !== filterType) return false;
     if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
-    return true;
+if (filterTenant && !getObjectTenants(o.id).find(ot => ot.tenant_id === filterTenant)) return false;
+return true;
   }).sort((a, b) => {
     let va = a[sortField], vb = b[sortField];
     if (va == null) va = ''; if (vb == null) vb = '';
@@ -365,10 +367,18 @@ export default function Objects({ onNavigate, highlightId }) {
           <option value="">Все этажи</option>
           {floors.map(f => <option key={f} value={f}>{f} этаж</option>)}
         </select>
-        <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
-          <option value="">Совместное: все</option>
-          <option value="да">Да</option><option value="нет">Нет</option>
-        </select>
+        <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
+  <option value="">Все арендаторы</option>
+  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+</select>              
+        <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
+  <option value="">Все арендаторы</option>
+  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+</select>
+<select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
+  <option value="">Совместное: все</option>
+  <option value="да">Да</option><option value="нет">Нет</option>
+</select>
         <button className="btn-add" onClick={openAdd}>+ Добавить объект</button>
       </div>
 
