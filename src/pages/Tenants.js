@@ -112,25 +112,9 @@ export default function Tenants({ onNavigate, highlightId }) {
   }
 
 async function declineName(name, field) {
-    if (!name) return alert('Введите ФИО для склонения');
-    setDeclLoading(true);
-    try {
-      const res = await fetch('/api/decline-name', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      });
-      const data = await res.json();
-      if (data.result) {
-        setForm(f => ({ ...f, [field]: data.result }));
-      } else {
-        alert('Не удалось склонить. Введите вручную.');
-      }
-    } catch(e) {
-      alert('Ошибка: ' + e.message);
-    }
-    setDeclLoading(false);
-  }
+  if (!name) return alert('Введите ФИО');
+  setForm(f => ({ ...f, [field]: name }));
+}
 
   function openAdd() {
     setForm({ type: 'ФИЗ.ЛИЦО', status: 'Активный', shared: false });
