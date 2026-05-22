@@ -296,8 +296,8 @@ export default function Objects({ onNavigate, highlightId }) {
     setEditingField(null);
   }
 
-  function openAdd() { setForm({ status: 'Не сдано', shared: false }); setShowForm(true); }
-  function openEdit(o) { setForm({ ...o }); setShowForm(true); setSelected(null); }
+  function openAdd() {   setForm({ status: 'Не сдано', shared: false, address: 'Г.САРАТОВ. ' });   setShowForm(true); }
+  function openEdit(o) {   const autoAddress = o.address || `Г.САРАТОВ. ${o.type ? o.type + '. ' : ''}${o.name}${o.floor ? ', ' + o.floor + ' этаж' : ''}${o.area ? ', ' + o.area + ' кв. м.' : ''}`;   setForm({ ...o, address: autoAddress });   setShowForm(true);   setSelected(null); }
 
   async function saveForm() {
     if (!form.name) return alert('Введите название объекта');
