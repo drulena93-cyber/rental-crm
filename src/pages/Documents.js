@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { saveAs } from 'file-saver';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+
 function numberToWords(num) {
   const n = parseInt(num);
   if (!n) return '';
@@ -13,36 +14,26 @@ function numberToWords(num) {
   const hundreds = ['','сто','двести','триста','четыреста','пятьсот','шестьсот','семьсот','восемьсот','девятьсот'];
   const thousands = ['','одна тысяча','две тысячи','три тысячи','четыре тысячи',
     'пять тысяч','шесть тысяч','семь тысяч','восемь тысяч','девять тысяч'];
-
   if (n < 20) return ones[n] + ' рублей 00 коп.';
-
   let result = '';
   const th = Math.floor(n / 1000);
   const rem = n % 1000;
-
-  if (th > 0 && th < 10) {
-    result += thousands[th] + ' ';
-  } else if (th >= 10) {
-    result += th + ' тысяч ';
-  }
-
+  if (th > 0 && th < 10) result += thousands[th] + ' ';
+  else if (th >= 10) result += th + ' тысяч ';
   const h = Math.floor(rem / 100);
   const t = Math.floor((rem % 100) / 10);
   const o = rem % 10;
-
   if (h > 0) result += hundreds[h] + ' ';
   if (t === 1) result += ones[10 + o] + ' ';
-  else {
-    if (t > 1) result += tens[t] + ' ';
-    if (o > 0) result += ones[o] + ' ';
-  }
-
+  else { if (t > 1) result += tens[t] + ' '; if (o > 0) result += ones[o] + ' '; }
   return result.trim() + ' рублей 00 коп.';
 }
+
 export default function Documents({ tenantId, tenantName, onClose }) {
   const [documents, setDocuments] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [docTypes, setDocTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -68,7 +59,6 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     const def = orgs?.find(o => o.is_default);
     if (def) setSelectedOrg(def.id);
 
-    // Загружаем шаблоны с Яндекс Диска
     try {
       const res = await fetch('/api/yandex-templates');
       const data = await res.json();
@@ -76,21 +66,33 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     } catch(e) {
       setTemplates([]);
     }
-    // Автозаполнение формы договора
-const lastNumRes = await fetch('/api/db', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ 
-    query: `SELECT value FROM settings WHERE id = 'last_number_договор'`, 
-    params: [] 
-  })
-});
-const lastNumData = await lastNumRes.json();
-const nextNum = (parseInt(lastNumData.rows?.[0]?.value) || 0) + 1;
-setContractForm({
-  номер_договора: String(nextNum),
-  дата_договора: ten?.contract_start || ''
-});
+
+    try {
+      const dtRes = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT name FROM document_types ORDER BY created_at`, params: [] })
+      });
+      const dtData = await dtRes.json();
+      setDocTypes((dtData.rows || []).map(r => r.name));
+    } catch(e) {
+      setDocTypes(['Договор', 'Акт', 'Доверенность', 'Скан паспорта', 'Другое']);
+    }
+
+    const lastNumRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT value FROM settings WHERE id = 'last_number_договор'`, params: [] })
+    });
+    const lastNumData = await lastNumRes.json();
+    const nextNum = (parseInt(lastNumData.rows?.[0]?.value) || 0) + 1;
+    setContractForm({
+      номер_договора: String(nextNum),
+      дата_договора: ten?.contract_start || ''
+    });
+
+    setLoading(false);
+  }
 
   async function uploadToYandex(filedata, filename, folder) {
     const res = await fetch('/api/upload-to-yandex', {
@@ -104,10 +106,7 @@ setContractForm({
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      };
+      reader.onload = () => { const base64 = reader.result.split(',')[1]; resolve(base64); };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
@@ -122,29 +121,19 @@ setContractForm({
       const base64 = await fileToBase64(file);
       const safeName = `${Date.now()}_${file.name}`;
       const result = await uploadToYandex(base64, safeName, `Документы/${tenantName}`);
-      if (!result.success) {
-        alert('Ошибка загрузки на Яндекс Диск: ' + result.error);
-        setUploading(false);
-        return;
-      }
-await supabase.from('documents').insert({
-  tenant_id: tenantId,
-  name: uploadForm.name,
-  type: uploadForm.type,
-  file_path: result.public_url,
-  file_size: file.size,
-  yandex_path: result.path,
-});
+      if (!result.success) { alert('Ошибка загрузки на Яндекс Диск: ' + result.error); setUploading(false); return; }
+      await supabase.from('documents').insert({
+        tenant_id: tenantId, name: uploadForm.name, type: uploadForm.type,
+        file_path: result.public_url, file_size: file.size, yandex_path: result.path,
+      });
       setShowUploadForm(false);
       setUploadForm({ name: '', type: 'Договор' });
       fetchAll();
-    } catch(e) {
-      alert('Ошибка: ' + e.message);
-    }
+    } catch(e) { alert('Ошибка: ' + e.message); }
     setUploading(false);
   }
 
-async function deleteDoc(id) {
+  async function deleteDoc(id) {
     if (!window.confirm('Удалить документ из CRM и Яндекс Диска?')) return;
     const doc = documents.find(d => d.id === id);
     if (doc?.yandex_path) {
@@ -166,17 +155,19 @@ async function deleteDoc(id) {
       const org = organizations.find(o => o.id === selectedOrg);
       const { data: objData } = await supabase.from('objects').select('*').eq('id', tenant?.object_id).single();
 
-      // Скачиваем шаблон через сервер
-const tmpl = templates.find(t => t.path === selectedTemplate);
-if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
-const dlRes = await fetch('/api/download-template', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ public_url: tmpl.public_url })
-});
-const dlData = await dlRes.json();
-if (!dlData.success) return alert('Ошибка скачивания шаблона');
-const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length); for (let i = 0; i < binary.length; i++) {   bytes[i] = binary.charCodeAt(i); } const arrayBuffer = bytes.buffer;
+      const tmpl = templates.find(t => t.path === selectedTemplate);
+      if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
+      const dlRes = await fetch('/api/download-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ public_url: tmpl.public_url })
+      });
+      const dlData = await dlRes.json();
+      if (!dlData.success) return alert('Ошибка скачивания шаблона');
+      const binary = atob(dlData.filedata);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+      const arrayBuffer = bytes.buffer;
 
       const zip = new PizZip(arrayBuffer);
       const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
@@ -199,17 +190,11 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
         арендодатель_банк: org?.bank || '',
         арендодатель_рс: org?.bank_account || '',
         арендодатель_кс: org?.corr_account || '',
-
-        // Для юрлица/ИП берём название, для физлица — ФИО
         арендатор_название: tenant?.name || '',
-        // Для юрлица/ИП — директор в родительном, для физлица — ФИО в родительном
         арендатор_директор: tenant?.type === 'ФИЗ.ЛИЦО'
           ? (tenant?.name_rod || tenant?.name || '')
           : (tenant?.director_rod || tenant?.director || ''),
-        арендатор_основание: tenant?.type === 'ФИЗ.ЛИЦО'
-          ? 'паспорта'
-          : (tenant?.basis || 'Устава'),
-        // Для физлица — прописка, для юрлица — юр.адрес
+        арендатор_основание: tenant?.type === 'ФИЗ.ЛИЦО' ? 'паспорта' : (tenant?.basis || 'Устава'),
         арендатор_адрес: tenant?.type === 'ФИЗ.ЛИЦО'
           ? (tenant?.address || tenant?.passport || '')
           : (tenant?.address_legal || ''),
@@ -222,55 +207,45 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
         арендатор_кс: '',
         арендатор_паспорт: tenant?.passport || '',
         арендатор_прописка: tenant?.address || '',
-
         объект_название: objData?.name || '',
         объект_площадь: objData?.area || '',
         объект_стоимость: objData?.rent ? objData.rent.toLocaleString('ru-RU') : '',
         объект_стоимость_прописью: numberToWords(objData?.rent || 0),
         объект_этаж: objData?.floor || '',
-        объект_адрес: objData?.name || '',
+        объект_адрес: objData?.address || objData?.name || '',
       });
 
-      const blob = doc.getZip().generate({
-        type: 'blob',
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      });
+      const blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
       const filename = `Договор_${tenant?.name}_${contractForm.номер_договора || 'б-н'}.docx`;
 
-      // Конвертируем blob в base64
       const base64 = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result.split(',')[1]);
         reader.readAsDataURL(blob);
       });
 
-      // Загружаем на Яндекс Диск
       const safeName = `${Date.now()}_${filename}`;
       const result = await uploadToYandex(base64, safeName, `Документы/${tenantName}`);
 
-      // Сохраняем запись в БД
       await supabase.from('documents').insert({
-  tenant_id: tenantId,
-  name: `Договор №${contractForm.номер_договора || 'б-н'} от ${contractForm.дата_договора ? new Date(contractForm.дата_договора).toLocaleDateString('ru-RU') : '___'}`,
-  type: 'Договор',
-  file_path: result.public_url || '',
-  file_size: blob.size,
-  yandex_path: result.path || '',
-});
-      // Обновляем счётчик номера договора
-await fetch('/api/db', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ 
-    query: `UPDATE settings SET value = $1 WHERE id = 'last_number_договор'`, 
-    params: [contractForm.номер_договора] 
-  })
-});
-// Сохраняем дату начала договора в карточку арендатора
-if (contractForm.дата_договора) {
-  await supabase.from('tenants').update({ contract_start: contractForm.дата_договора }).eq('id', tenantId);
-}
-      // Скачиваем локально
+        tenant_id: tenantId,
+        name: `Договор №${contractForm.номер_договора || 'б-н'} от ${contractForm.дата_договора ? new Date(contractForm.дата_договора).toLocaleDateString('ru-RU') : '___'}`,
+        type: 'Договор',
+        file_path: result.public_url || '',
+        file_size: blob.size,
+        yandex_path: result.path || '',
+      });
+
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `UPDATE settings SET value = $1 WHERE id = 'last_number_договор'`, params: [contractForm.номер_договора] })
+      });
+
+      if (contractForm.дата_договора) {
+        await supabase.from('tenants').update({ contract_start: contractForm.дата_договора }).eq('id', tenantId);
+      }
+
       saveAs(blob, filename);
       setShowContractForm(false);
       fetchAll();
@@ -302,28 +277,18 @@ if (contractForm.дата_договора) {
         </div>
 
         <div style={{display:'flex', gap:8, marginBottom:16}}>
-          <button className="btn-add" onClick={() => setShowUploadForm(true)}>
-            📎 Прикрепить документ
-          </button>
+          <button className="btn-add" onClick={() => setShowUploadForm(true)}>📎 Прикрепить документ</button>
           <button style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'7px 14px', fontSize:13, cursor:'pointer'}}
-            onClick={() => setShowContractForm(true)}>
-            ✨ Сформировать из шаблона
-          </button>
+            onClick={() => setShowContractForm(true)}>✨ Сформировать из шаблона</button>
         </div>
 
         {loading ? <p>Загрузка...</p> : documents.length === 0 ? (
-          <div style={{textAlign:'center', color:'#aaa', padding:30, fontSize:13}}>
-            Документы не прикреплены
-          </div>
+          <div style={{textAlign:'center', color:'#aaa', padding:30, fontSize:13}}>Документы не прикреплены</div>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Название</th>
-                <th>Тип</th>
-                <th>Размер</th>
-                <th>Дата</th>
-                <th style={{width:140}}>Действия</th>
+                <th>Название</th><th>Тип</th><th>Размер</th><th>Дата</th><th style={{width:140}}>Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -341,9 +306,7 @@ if (contractForm.дата_договора) {
                       </a>
                     )}
                     <button onClick={() => deleteDoc(doc.id)}
-                      style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>
-                      ✕
-                    </button>
+                      style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>✕</button>
                   </td>
                 </tr>
               ))}
@@ -360,11 +323,7 @@ if (contractForm.дата_договора) {
               </div>
               <div className="form-group"><label>Тип</label>
                 <select value={uploadForm.type} onChange={e => setUploadForm({...uploadForm, type: e.target.value})}>
-                  <option>Договор</option>
-                  <option>Акт</option>
-                  <option>Доверенность</option>
-                  <option>Скан паспорта</option>
-                  <option>Другое</option>
+                  {docTypes.map(dt => <option key={dt}>{dt}</option>)}
                 </select>
               </div>
             </div>
