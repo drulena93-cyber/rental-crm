@@ -9,6 +9,9 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterShared, setFilterShared] = useState('');
+  const [filterObject, setFilterObject] = useState('');
+  const [sortField, setSortField] = useState('created_at');
+  const [sortDir, setSortDir] = useState('desc');
   const [selected, setSelected] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
@@ -37,12 +40,30 @@ export default function Tenants({ onNavigate, highlightId }) {
     setLoading(false);
   }
 
+  function handleSort(field) {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+  }
+
+  function sortIcon(field) {
+    if (sortField !== field) return <span style={{color:'#ccc', marginLeft:4}}>↕</span>;
+    return <span style={{marginLeft:4}}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
+
   const filtered = tenants.filter(t => {
     if (search && !t.name?.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterType && t.type !== filterType) return false;
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterShared && (filterShared === 'да' ? !t.shared : t.shared)) return false;
+    if (filterObject && t.object_id !== filterObject) return false;
     return true;
+  }).sort((a, b) => {
+    let va = a[sortField], vb = b[sortField];
+    if (va == null) va = ''; if (vb == null) vb = '';
+    if (sortField === 'contract_end' || sortField === 'contract_start' || sortField === 'created_at') {
+      return sortDir === 'asc' ? new Date(va) - new Date(vb) : new Date(vb) - new Date(va);
+    }
+    return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
   });
 
   const active = tenants.filter(t => t.status === 'Активный');
@@ -111,10 +132,10 @@ export default function Tenants({ onNavigate, highlightId }) {
     setDadataLoading(false);
   }
 
-async function declineName(name, field) {
-  if (!name) return alert('Введите ФИО');
-  setForm(f => ({ ...f, [field]: name }));
-}
+  async function declineName(name, field) {
+    if (!name) return alert('Введите ФИО');
+    setForm(f => ({ ...f, [field]: name }));
+  }
 
   function openAdd() {
     setForm({ type: 'ФИЗ.ЛИЦО', status: 'Активный', shared: false });
@@ -169,6 +190,7 @@ async function declineName(name, field) {
   const isJuridical = form.type === 'ЮРИД.ЛИЦО' || form.type === 'ИП';
   const isFiz = form.type === 'ФИЗ.ЛИЦО';
   const btnStyle = { background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 10px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap', height:36 };
+  const thStyle = { cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' };
 
   return (
     <div>
@@ -195,6 +217,10 @@ async function declineName(name, field) {
           <option value="">Все статусы</option>
           <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
         </select>
+        <select value={filterObject} onChange={e => setFilterObject(e.target.value)}>
+          <option value="">Все объекты</option>
+          {objects.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
         <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
           <option value="">Совместное: все</option>
           <option value="да">Да</option><option value="нет">Нет</option>
@@ -206,12 +232,12 @@ async function declineName(name, field) {
         <table>
           <thead>
             <tr>
-              <th>Название / ФИО</th>
-              <th>Тип</th>
-              <th>Статус</th>
-              <th>Вид деятельности</th>
-              <th>Объект</th>
-              <th>Окончание договора</th>
+              <th style={thStyle} onClick={() => handleSort('name')}>Название / ФИО{sortIcon('name')}</th>
+              <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
+              <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
+              <th style={thStyle} onClick={() => handleSort('activity')}>Вид деятельности{sortIcon('activity')}</th>
+              <th style={thStyle} onClick={() => handleSort('object_id')}>Объект{sortIcon('object_id')}</th>
+              <th style={thStyle} onClick={() => handleSort('contract_end')}>Окончание договора{sortIcon('contract_end')}</th>
               <th>Контакты</th>
             </tr>
           </thead>
