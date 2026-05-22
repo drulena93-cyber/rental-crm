@@ -80,16 +80,17 @@ export default function Documents({ tenantId, tenantName, onClose }) {
 const lastNumRes = await fetch('/api/db', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ query: `SELECT MAX(CAST(NULLIF(regexp_replace(name, '[^0-9]', '', 'g'), '') AS INTEGER)) as max_num FROM documents`, params: [] })
+  body: JSON.stringify({ 
+    query: `SELECT value FROM settings WHERE id = 'last_number_договор'`, 
+    params: [] 
+  })
 });
 const lastNumData = await lastNumRes.json();
-const nextNum = (lastNumData.rows?.[0]?.max_num || 0) + 1;
+const nextNum = (parseInt(lastNumData.rows?.[0]?.value) || 0) + 1;
 setContractForm({
   номер_договора: String(nextNum),
   дата_договора: ten?.contract_start || ''
 });
-    setLoading(false);
-  }
 
   async function uploadToYandex(filedata, filename, folder) {
     const res = await fetch('/api/upload-to-yandex', {
@@ -255,6 +256,15 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
   file_path: result.public_url || '',
   file_size: blob.size,
   yandex_path: result.path || '',
+});
+      // Обновляем счётчик номера договора
+await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ 
+    query: `UPDATE settings SET value = $1 WHERE id = 'last_number_договор'`, 
+    params: [contractForm.номер_договора] 
+  })
 });
 // Сохраняем дату начала договора в карточку арендатора
 if (contractForm.дата_договора) {
