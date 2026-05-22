@@ -111,50 +111,28 @@ export default function Tenants({ onNavigate, highlightId }) {
     setDadataLoading(false);
   }
 
-  // Склонение ФИО через DaData
   async function declineName(name, field) {
     if (!name) return alert('Введите ФИО для склонения');
     setDeclLoading(true);
     try {
-      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/fio', {
+      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/inflect/name', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
-        body: JSON.stringify({ query: name, count: 1 })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${DADATA_TOKEN}`
+        },
+        body: JSON.stringify({ query: name, cases: ['родительный'] })
       });
       const data = await res.json();
-      if (!data.suggestions?.length) {
-        alert('ФИО не распознано. Введите родительный падеж вручную.');
-        setDeclLoading(false);
-        return;
-      }
-      const fio = data.suggestions[0].data;
-      // Склоняем каждую часть отдельно
-      const parts = [];
-      if (fio.surname) parts.push(await declinePart(fio.surname, 'surname', fio.gender));
-      if (fio.name) parts.push(await declinePart(fio.name, 'name', fio.gender));
-      if (fio.patronymic) parts.push(await declinePart(fio.patronymic, 'patronymic', fio.gender));
-      const result = parts.filter(Boolean).join(' ');
-      if (result) {
-        setForm(f => ({ ...f, [field]: result }));
+      if (data.result) {
+        setForm(f => ({ ...f, [field]: data.result }));
       } else {
-        alert('Не удалось склонить. Введите вручную.');
+        alert('Не удалось склонить автоматически. Введите вручную.');
       }
     } catch(e) {
       alert('Ошибка склонения: ' + e.message);
     }
     setDeclLoading(false);
-  }
-
-  async function declinePart(word, part, gender) {
-    try {
-      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/inflect/fio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
-        body: JSON.stringify({ query: word, parts: [part], gender: gender || 'UNKNOWN', cases: ['родительный'] })
-      });
-      const data = await res.json();
-      return data.result || word;
-    } catch(e) { return word; }
   }
 
   function openAdd() {
@@ -209,7 +187,7 @@ export default function Tenants({ onNavigate, highlightId }) {
   const daysLeft = (date) => { if (!date) return null; return Math.ceil((new Date(date) - today) / (1000 * 60 * 60 * 24)); };
   const isJuridical = form.type === 'ЮРИД.ЛИЦО' || form.type === 'ИП';
   const isFiz = form.type === 'ФИЗ.ЛИЦО';
-  const btnStyle = {background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 10px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap', height:36};
+  const btnStyle = { background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 10px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap', height:36 };
 
   return (
     <div>
