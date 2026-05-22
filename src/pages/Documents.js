@@ -3,7 +3,42 @@ import { supabase } from '../supabaseClient';
 import { saveAs } from 'file-saver';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+function numberToWords(num) {
+  const n = parseInt(num);
+  if (!n) return '';
+  const ones = ['','один','два','три','четыре','пять','шесть','семь','восемь','девять',
+    'десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать',
+    'шестнадцать','семнадцать','восемнадцать','девятнадцать'];
+  const tens = ['','','двадцать','тридцать','сорок','пятьдесят','шестьдесят','семьдесят','восемьдесят','девяносто'];
+  const hundreds = ['','сто','двести','триста','четыреста','пятьсот','шестьсот','семьсот','восемьсот','девятьсот'];
+  const thousands = ['','одна тысяча','две тысячи','три тысячи','четыре тысячи',
+    'пять тысяч','шесть тысяч','семь тысяч','восемь тысяч','девять тысяч'];
 
+  if (n < 20) return ones[n] + ' рублей 00 коп.';
+
+  let result = '';
+  const th = Math.floor(n / 1000);
+  const rem = n % 1000;
+
+  if (th > 0 && th < 10) {
+    result += thousands[th] + ' ';
+  } else if (th >= 10) {
+    result += th + ' тысяч ';
+  }
+
+  const h = Math.floor(rem / 100);
+  const t = Math.floor((rem % 100) / 10);
+  const o = rem % 10;
+
+  if (h > 0) result += hundreds[h] + ' ';
+  if (t === 1) result += ones[10 + o] + ' ';
+  else {
+    if (t > 1) result += tens[t] + ' ';
+    if (o > 0) result += ones[o] + ' ';
+  }
+
+  return result.trim() + ' рублей 00 коп.';
+}
 export default function Documents({ tenantId, tenantName, onClose }) {
   const [documents, setDocuments] = useState([]);
   const [organizations, setOrganizations] = useState([]);
@@ -160,6 +195,7 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
         объект_название: objData?.name || '',
         объект_площадь: objData?.area || '',
         объект_стоимость: objData?.rent || '',
+объект_стоимость_прописью: numberToWords(objData?.rent || 0),
         объект_этаж: objData?.floor || '',
       });
 
