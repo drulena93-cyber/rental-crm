@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import Documents from './Documents';
-import { saveAs } from 'file-saver';
-import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
 
 export default function Tenants({ onNavigate, highlightId }) {
   const [tenants, setTenants] = useState([]);
@@ -17,9 +14,10 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [editingStatus, setEditingStatus] = useState(null);
-const [showDocuments, setShowDocuments] = useState(false);
+  const [showDocuments, setShowDocuments] = useState(false);
   const [dadataLoading, setDadataLoading] = useState(false);
-const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
+  const [declLoading, setDeclLoading] = useState(false);
+  const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -30,14 +28,14 @@ const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
     }
   }, [highlightId, tenants]);
 
-async function fetchAll() {
-  setLoading(true);
-  const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('created_at', { ascending: false });
-  const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
-  setTenants(tens || []);
-  setObjects(objs || []);
-  setLoading(false);
-}
+  async function fetchAll() {
+    setLoading(true);
+    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+    const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
+    setTenants(tens || []);
+    setObjects(objs || []);
+    setLoading(false);
+  }
 
   const filtered = tenants.filter(t => {
     if (search && !t.name?.toLowerCase().includes(search.toLowerCase())) return false;
@@ -57,90 +55,98 @@ async function fetchAll() {
     return diff >= 0 && diff <= 30;
   });
 
-async function quickUpdateStatus(id, status) {
+  async function quickUpdateStatus(id, status) {
     await supabase.from('tenants').update({ status }).eq('id', id);
-
-    // Если арендатор съехал — создаём запись в истории объекта
     if (status === 'Съехал') {
       const tenant = tenants.find(t => t.id === id);
       if (tenant) {
-        // Ищем объект через object_tenants
         const otRes = await fetch('/api/db', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: `SELECT object_id FROM object_tenants WHERE tenant_id = $1 LIMIT 1`,
-            params: [id]
-          })
+          body: JSON.stringify({ query: `SELECT object_id FROM object_tenants WHERE tenant_id = $1 LIMIT 1`, params: [id] })
         });
         const otData = await otRes.json();
         const objectId = otData.rows?.[0]?.object_id || tenant.object_id;
-
         if (objectId) {
           await fetch('/api/db', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto)
-                      VALUES ($1, $2, $3, $4, $5, $6, true)`,
-              params: [
-                objectId,
-                id,
-                tenant.name,
-                tenant.contract_start || null,
-                new Date().toISOString().split('T')[0],
-                'Автоматически при смене статуса на Съехал'
-              ]
+              query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, true)`,
+              params: [objectId, id, tenant.name, tenant.contract_start || null, new Date().toISOString().split('T')[0], 'Автоматически при смене статуса на Съехал']
             })
           });
         }
       }
     }
-
     setTenants(tenants.map(t => t.id === id ? { ...t, status } : t));
     setEditingStatus(null);
+  }
+
+  // Поиск по ИНН через DaData
+  async function findByInn(inn) {
+    if (!inn || inn.length < 10) return alert('Введите ИНН (10 или 12 цифр)');
+    setDadataLoading(true);
+    try {
+      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
+        body: JSON.stringify({ query: inn, count: 1 })
+      });
+      const data = await res.json();
+      if (!data.suggestions?.length) { alert('Организация не найдена'); setDadataLoading(false); return; }
+      const s = data.suggestions[0];
+      const d = s.data;
+      setForm(f => ({
+        ...f,
+        name: s.value || f.name,
+        inn: d.inn || f.inn,
+        ogrn: d.ogrn || f.ogrn,
+        kpp: d.kpp || f.kpp,
+        address_legal: d.address?.value || f.address_legal,
+        director: d.management?.name || f.director,
+        type: d.type === 'INDIVIDUAL' ? 'ИП' : 'ЮРИД.ЛИЦО',
+        basis: d.management?.post || f.basis,
+      }));
+    } catch(e) { alert('Ошибка запроса к DaData'); }
+    setDadataLoading(false);
+  }
+
+  // Склонение ФИО через DaData
+  async function declineName(name, field) {
+    if (!name) return alert('Введите ФИО для склонения');
+    setDeclLoading(true);
+    try {
+      const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/inflect/name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
+        body: JSON.stringify({ query: name, count: 1 })
+      });
+      const data = await res.json();
+      const genitive = data.suggestions?.find(s => s.data?.gender !== undefined)?.data;
+      if (data.suggestions?.length) {
+        // Берём родительный падеж
+        const res2 = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/inflect/name', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${DADATA_TOKEN}` },
+          body: JSON.stringify({ query: name, count: 1, cases: ['родительный'] })
+        });
+        const data2 = await res2.json();
+        if (data2.result) {
+          setForm(f => ({ ...f, [field]: data2.result }));
+        } else {
+          alert('Не удалось склонить. Введите вручную.');
+        }
+      }
+    } catch(e) { alert('Ошибка склонения: ' + e.message); }
+    setDeclLoading(false);
   }
 
   function openAdd() {
     setForm({ type: 'ФИЗ.ЛИЦО', status: 'Активный', shared: false });
     setShowForm(true);
   }
-async function findByInn(inn) {
-  if (!inn || inn.length < 10) return alert('Введите ИНН (10 или 12 цифр)');
-  setDadataLoading(true);
-  try {
-    const res = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${DADATA_TOKEN}`
-      },
-      body: JSON.stringify({ query: inn, count: 1 })
-    });
-    const data = await res.json();
-    if (!data.suggestions || data.suggestions.length === 0) {
-      alert('Организация не найдена');
-      setDadataLoading(false);
-      return;
-    }
-    const s = data.suggestions[0];
-    const d = s.data;
-    setForm(f => ({
-      ...f,
-      name: s.value || f.name,
-      inn: d.inn || f.inn,
-      ogrn: d.ogrn || f.ogrn,
-      kpp: d.kpp || f.kpp,
-      passport: d.address?.value || f.passport,
-      director: d.management?.name || f.director,
-      type: d.type === 'INDIVIDUAL' ? 'ИП' : 'ЮРИД.ЛИЦО',
-      basis: d.management?.post || f.basis,
-    }));
-  } catch(e) {
-    alert('Ошибка запроса к DaData');
-  }
-  setDadataLoading(false);
-}
+
   function openEdit(t) {
     setForm({ ...t });
     setShowForm(true);
@@ -161,62 +167,13 @@ async function findByInn(inn) {
     fetchAll();
   }
 
-async function deleteTenant(id) {
-  if (!window.confirm('Переместить арендатора в корзину?')) return;
-  await supabase.from('tenants').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-  setSelected(null);
-  fetchAll();
-}
-async function generateContract(tenant) {
-  if (!selectedTemplate) return alert('Выберите шаблон договора');
-  if (!selectedOrg) return alert('Выберите организацию арендодателя');
-  setGenerating(true);
-  try {
-    const org = organizations.find(o => o.id === selectedOrg);
-    const obj = getObject(tenant.object_id);
-    const { data: fileData } = await supabase.storage.from('templates').download(selectedTemplate);
-    const arrayBuffer = await fileData.arrayBuffer();
-    const zip = new PizZip(arrayBuffer);
-    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-    doc.render({
-      номер_договора: contractForm.номер_договора || '___',
-      дата_договора: contractForm.дата_договора || '___',
-      арендодатель_название: org?.full_name || org?.name || '',
-      арендодатель_директор: org?.director_rod || org?.director || '',
-      арендодатель_основание: org?.basis || '',
-      арендодатель_адрес: org?.address_legal || '',
-      арендодатель_инн: org?.inn || '',
-      арендодатель_огрн: org?.ogrn || '',
-      арендодатель_кпп: org?.kpp || '',
-      арендодатель_бик: org?.bik || '',
-      арендодатель_банк: org?.bank || '',
-      арендодатель_рс: org?.bank_account || '',
-      арендодатель_кс: org?.corr_account || '',
-      арендатор_название: tenant.name || '',
-      арендатор_директор: tenant.director || '',
-      арендатор_основание: tenant.basis || '',
-      арендатор_адрес: tenant.passport || '',
-      арендатор_инн: tenant.inn || '',
-      арендатор_огрн: tenant.ogrn || '',
-      арендатор_кпп: tenant.kpp || '',
-      арендатор_бик: '',
-      арендатор_банк: tenant.bank || '',
-      арендатор_рс: '',
-      арендатор_кс: '',
-      объект_название: obj?.name || '',
-      объект_площадь: obj?.area || '',
-      объект_стоимость: obj?.rent || '',
-      объект_этаж: obj?.floor || '',
-    });
-    const blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    saveAs(blob, `Договор_${tenant.name}_${contractForm.номер_договора || 'б-н'}.docx`);
-    setShowContractForm(false);
-  } catch(e) {
-    console.error(e);
-    alert('Ошибка генерации договора: ' + e.message);
+  async function deleteTenant(id) {
+    if (!window.confirm('Переместить арендатора в корзину?')) return;
+    await supabase.from('tenants').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    setSelected(null);
+    fetchAll();
   }
-  setGenerating(false);
-}
+
   function statusBadge(t) {
     const s = t.status;
     const cls = s === 'Активный' ? 'badge-green' : 'badge-gray';
@@ -234,11 +191,12 @@ async function generateContract(tenant) {
   }
 
   const getObject = (id) => objects.find(o => o.id === id);
+  const daysLeft = (date) => { if (!date) return null; return Math.ceil((new Date(date) - today) / (1000 * 60 * 60 * 24)); };
 
-  const daysLeft = (date) => {
-    if (!date) return null;
-    return Math.ceil((new Date(date) - today) / (1000 * 60 * 60 * 24));
-  };
+  const isJuridical = form.type === 'ЮРИД.ЛИЦО' || form.type === 'ИП';
+  const isFiz = form.type === 'ФИЗ.ЛИЦО';
+
+  const btnStyle = {background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 10px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap', height:36};
 
   return (
     <div>
@@ -267,8 +225,7 @@ async function generateContract(tenant) {
         </select>
         <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
           <option value="">Совместное: все</option>
-          <option value="да">Да</option>
-          <option value="нет">Нет</option>
+          <option value="да">Да</option><option value="нет">Нет</option>
         </select>
         <button className="btn-add" onClick={openAdd}>+ Добавить арендатора</button>
       </div>
@@ -297,11 +254,7 @@ async function generateContract(tenant) {
                   <td onClick={e => e.stopPropagation()}>
                     {editingStatus === t.id ? (
                       <select autoFocus value={t.status} onChange={e => quickUpdateStatus(t.id, e.target.value)} onBlur={() => setEditingStatus(null)}>
-                        <option>Активный</option>
-<option>Неактивный</option>
-<option>В работе</option>
-<option>Съехал</option>
-<option>Не указан</option>
+                        <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
                       </select>
                     ) : statusBadge(t)}
                   </td>
@@ -333,25 +286,34 @@ async function generateContract(tenant) {
               {selected.name}
               <button className="modal-close" onClick={() => setSelected(null)}>✕ Закрыть</button>
             </div>
-            <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{typeBadge(selected.type)}</div></div>
-            <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{selected.status}</div></div>
-            <div className="detail-row"><div className="detail-key">Вид деятельности</div><div className="detail-val">{selected.activity || '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Паспорт / Прописка</div><div className="detail-val" style={{fontSize:12}}>{selected.passport || '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">ИНН</div><div className="detail-val">{selected.inn || '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">ОГРН/П</div><div className="detail-val">{selected.ogrn || '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Банк / Р/С</div><div className="detail-val">{selected.bank || '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Окончание договора</div><div className="detail-val">{selected.contract_end ? new Date(selected.contract_end).toLocaleDateString('ru-RU') : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
-            <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments || '—'}</div></div>
             {getObject(selected.object_id) && (
-              <div className="linked-section">
-                <div className="linked-title">Арендуемый объект</div>
-                <div className="linked-item" style={{cursor:'pointer', color:'#534AB7'}}
+              <div className="detail-row"><div className="detail-key">Объект</div>
+                <div className="detail-val" style={{color:'#534AB7', cursor:'pointer'}}
                   onClick={() => { setSelected(null); onNavigate('objects', getObject(selected.object_id).id); }}>
                   → {getObject(selected.object_id).name}
                 </div>
               </div>
             )}
+            <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{typeBadge(selected.type)}</div></div>
+            <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{selected.status}</div></div>
+            <div className="detail-row"><div className="detail-key">Вид деятельности</div><div className="detail-val">{selected.activity || '—'}</div></div>
+            {(selected.type === 'ФИЗ.ЛИЦО') && <>
+              <div className="detail-row"><div className="detail-key">Паспорт</div><div className="detail-val" style={{fontSize:12}}>{selected.passport || '—'}</div></div>
+              <div className="detail-row"><div className="detail-key">Прописка</div><div className="detail-val" style={{fontSize:12}}>{selected.address || '—'}</div></div>
+              <div className="detail-row"><div className="detail-key">ФИО (род. падеж)</div><div className="detail-val">{selected.name_rod || '—'}</div></div>
+            </>}
+            {(selected.type === 'ЮРИД.ЛИЦО' || selected.type === 'ИП') && <>
+              <div className="detail-row"><div className="detail-key">Директор</div><div className="detail-val">{selected.director || '—'}</div></div>
+              <div className="detail-row"><div className="detail-key">Директор (род.)</div><div className="detail-val">{selected.director_rod || '—'}</div></div>
+              <div className="detail-row"><div className="detail-key">Юр. адрес</div><div className="detail-val" style={{fontSize:12}}>{selected.address_legal || '—'}</div></div>
+              <div className="detail-row"><div className="detail-key">КПП</div><div className="detail-val">{selected.kpp || '—'}</div></div>
+            </>}
+            <div className="detail-row"><div className="detail-key">ИНН</div><div className="detail-val">{selected.inn || '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">ОГРН</div><div className="detail-val">{selected.ogrn || '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Банк / Р/С / К/С</div><div className="detail-val" style={{fontSize:12, whiteSpace:'pre-wrap'}}>{selected.bank || '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Окончание договора</div><div className="detail-val">{selected.contract_end ? new Date(selected.contract_end).toLocaleDateString('ru-RU') : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
+            <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments || '—'}</div></div>
             <div className="linked-section">
               <div className="linked-title">Контакты</div>
               <div className="linked-item" style={{cursor:'pointer', color:'#534AB7'}}
@@ -359,11 +321,11 @@ async function generateContract(tenant) {
                 → Открыть контакты арендатора
               </div>
             </div>
-<div className="form-actions">
-  <button className="btn-cancel" onClick={() => deleteTenant(selected.id)}>В корзину</button>
-  <button style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'8px 14px', fontSize:13, cursor:'pointer'}} onClick={() => setShowDocuments(true)}>📄 Документы</button>
-  <button className="btn-save" onClick={() => openEdit(selected)}>Редактировать</button>
-</div>
+            <div className="form-actions">
+              <button className="btn-cancel" onClick={() => deleteTenant(selected.id)}>В корзину</button>
+              <button style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'8px 14px', fontSize:13, cursor:'pointer'}} onClick={() => setShowDocuments(true)}>📄 Документы</button>
+              <button className="btn-save" onClick={() => openEdit(selected)}>Редактировать</button>
+            </div>
           </div>
         </div>
       )}
@@ -375,7 +337,20 @@ async function generateContract(tenant) {
               {form.id ? 'Редактировать арендатора' : 'Новый арендатор'}
               <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
             </div>
-            <div className="form-group"><label>ФИО / Название *</label><input value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} /></div>
+
+            {/* Объект — вверху */}
+            <div className="form-group"><label>Объект (помещение)</label>
+              <select value={form.object_id || ''} onChange={e => setForm({...form, object_id: e.target.value})}>
+                <option value="">— Не назначен —</option>
+                {objects.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </div>
+
+            {/* Основные поля */}
+            <div className="form-group"><label>ФИО / Название *</label>
+              <input value={form.name || ''} onChange={e => setForm({...form, name: e.target.value})} />
+            </div>
+
             <div className="form-grid">
               <div className="form-group"><label>Тип</label>
                 <select value={form.type || ''} onChange={e => setForm({...form, type: e.target.value})}>
@@ -388,31 +363,95 @@ async function generateContract(tenant) {
                 </select>
               </div>
             </div>
-            <div className="form-group"><label>Вид деятельности</label><input value={form.activity || ''} onChange={e => setForm({...form, activity: e.target.value})} /></div>
-            <div className="form-group"><label>Паспорт / Прописка</label><textarea rows={2} value={form.passport || ''} onChange={e => setForm({...form, passport: e.target.value})} /></div>
-            <div className="form-grid">
+
+            <div className="form-group"><label>Вид деятельности</label>
+              <input value={form.activity || ''} onChange={e => setForm({...form, activity: e.target.value})} />
+            </div>
+
+            {/* Поля для ФИЗ.ЛИЦА */}
+            {isFiz && <>
+              <div className="form-group"><label>ФИО в родительном падеже</label>
+                <div style={{display:'flex', gap:6}}>
+                  <input value={form.name_rod || ''} onChange={e => setForm({...form, name_rod: e.target.value})}
+                    placeholder="Иванова Ивана Ивановича" style={{flex:1}} />
+                  <button type="button" style={btnStyle}
+                    onClick={() => declineName(form.name, 'name_rod')}>
+                    {declLoading ? '...' : '📝 Склонить'}
+                  </button>
+                </div>
+              </div>
+              <div className="form-group"><label>Паспорт</label>
+                <textarea rows={2} value={form.passport || ''} onChange={e => setForm({...form, passport: e.target.value})}
+                  placeholder="Серия, номер, кем и когда выдан" />
+              </div>
+              <div className="form-group"><label>Прописка</label>
+                <textarea rows={2} value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})}
+                  placeholder="Адрес регистрации" />
+              </div>
               <div className="form-group"><label>ИНН</label>
-  <div style={{display:'flex', gap:6}}>
-    <input value={form.inn || ''} onChange={e => setForm({...form, inn: e.target.value})} placeholder="Введите ИНН..." />
-    <button type="button" onClick={() => findByInn(form.inn)}
-      style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 12px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap'}}>
-      {dadataLoading ? '...' : '🔍 Найти'}
-    </button>
-  </div>
-</div>
-              <div className="form-group"><label>ОГРН/П</label><input value={form.ogrn || ''} onChange={e => setForm({...form, ogrn: e.target.value})} /></div>
-              <div className="form-group"><label>Дата регистрации</label><input type="date" value={form.reg_date || ''} onChange={e => setForm({...form, reg_date: e.target.value})} /></div>
-              <div className="form-group"><label>Окончание договора</label><input type="date" value={form.contract_end || ''} onChange={e => setForm({...form, contract_end: e.target.value})} /></div>
+                <input value={form.inn || ''} onChange={e => setForm({...form, inn: e.target.value})} placeholder="Введите ИНН..." />
+              </div>
+            </>}
+
+            {/* Поля для ЮРИД.ЛИЦА и ИП */}
+            {isJuridical && <>
+              <div className="form-group"><label>ИНН</label>
+                <div style={{display:'flex', gap:6}}>
+                  <input value={form.inn || ''} onChange={e => setForm({...form, inn: e.target.value})} placeholder="Введите ИНН..." style={{flex:1}} />
+                  <button type="button" style={btnStyle} onClick={() => findByInn(form.inn)}>
+                    {dadataLoading ? '...' : '🔍 Найти'}
+                  </button>
+                </div>
+              </div>
+              <div className="form-grid">
+                <div className="form-group"><label>ОГРН</label>
+                  <input value={form.ogrn || ''} onChange={e => setForm({...form, ogrn: e.target.value})} />
+                </div>
+                <div className="form-group"><label>КПП</label>
+                  <input value={form.kpp || ''} onChange={e => setForm({...form, kpp: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-group"><label>Юридический адрес</label>
+                <textarea rows={2} value={form.address_legal || ''} onChange={e => setForm({...form, address_legal: e.target.value})} />
+              </div>
+              <div className="form-group"><label>Директор (именительный)</label>
+                <input value={form.director || ''} onChange={e => setForm({...form, director: e.target.value})}
+                  placeholder="Иванов Иван Иванович" />
+              </div>
+              <div className="form-group"><label>Директор (родительный падеж)</label>
+                <div style={{display:'flex', gap:6}}>
+                  <input value={form.director_rod || ''} onChange={e => setForm({...form, director_rod: e.target.value})}
+                    placeholder="Иванова Ивана Ивановича" style={{flex:1}} />
+                  <button type="button" style={btnStyle}
+                    onClick={() => declineName(form.director, 'director_rod')}>
+                    {declLoading ? '...' : '📝 Склонить'}
+                  </button>
+                </div>
+              </div>
+            </>}
+
+            {/* Общие поля */}
+            <div className="form-group"><label>Банк / Р/С / К/С</label>
+              <textarea rows={3} value={form.bank || ''} onChange={e => setForm({...form, bank: e.target.value})}
+                placeholder={'Банк: \nР/С: \nК/С: \nБИК: '} />
             </div>
-            <div className="form-group"><label>Банк / Р/С / К/С</label><input value={form.bank || ''} onChange={e => setForm({...form, bank: e.target.value})} /></div>
-            <div className="form-group"><label>Объект (помещение)</label>
-              <select value={form.object_id || ''} onChange={e => setForm({...form, object_id: e.target.value})}>
-                <option value="">— Не назначен —</option>
-                {objects.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
+
+            <div className="form-grid">
+              <div className="form-group"><label>Дата регистрации</label>
+                <input type="date" value={form.reg_date || ''} onChange={e => setForm({...form, reg_date: e.target.value})} />
+              </div>
+              <div className="form-group"><label>Окончание договора</label>
+                <input type="date" value={form.contract_end || ''} onChange={e => setForm({...form, contract_end: e.target.value})} />
+              </div>
             </div>
-            <div className="form-group"><label>Комментарии</label><textarea rows={2} value={form.comments || ''} onChange={e => setForm({...form, comments: e.target.value})} /></div>
-            <div className="form-group"><label><input type="checkbox" checked={form.shared || false} onChange={e => setForm({...form, shared: e.target.checked})} /> Совместное пользование</label></div>
+
+            <div className="form-group"><label>Комментарии</label>
+              <textarea rows={2} value={form.comments || ''} onChange={e => setForm({...form, comments: e.target.value})} />
+            </div>
+            <div className="form-group"><label>
+              <input type="checkbox" checked={form.shared || false} onChange={e => setForm({...form, shared: e.target.checked})} /> Совместное пользование
+            </label></div>
+
             <div className="form-actions">
               <button className="btn-cancel" onClick={() => setShowForm(false)}>Отмена</button>
               <button className="btn-save" onClick={saveForm}>Сохранить</button>
@@ -420,13 +459,14 @@ async function generateContract(tenant) {
           </div>
         </div>
       )}
-        {showDocuments && selected && (
-  <Documents
-    tenantId={selected.id}
-    tenantName={selected.name}
-    onClose={() => setShowDocuments(false)}
-  />
-)}
+
+      {showDocuments && selected && (
+        <Documents
+          tenantId={selected.id}
+          tenantName={selected.name}
+          onClose={() => setShowDocuments(false)}
+        />
+      )}
     </div>
   );
 }
