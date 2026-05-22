@@ -250,7 +250,7 @@ const binary = atob(dlData.filedata); const bytes = new Uint8Array(binary.length
       // Сохраняем запись в БД
       await supabase.from('documents').insert({
   tenant_id: tenantId,
-  name: `Договор №${contractForm.номер_договора || 'б-н'} от ${contractForm.дата_договора || '___'}`,
+  name: `Договор №${contractForm.номер_договора || 'б-н'} от ${contractForm.дата_договора ? new Date(contractForm.дата_договора).toLocaleDateString('ru-RU') : '___'}`,
   type: 'Договор',
   file_path: result.public_url || '',
   file_size: blob.size,
