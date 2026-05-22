@@ -126,7 +126,7 @@ export default function Tenants({ onNavigate, highlightId }) {
         address_legal: d.address?.value || f.address_legal,
         director: d.management?.name || f.director,
         type: d.type === 'INDIVIDUAL' ? 'ИП' : 'ЮРИД.ЛИЦО',
-        basis: d.management?.post || f.basis,
+        basis: d.type === 'INDIVIDUAL' ? 'Свидетельства о регистрации' : 'Устава',
       }));
     } catch(e) { alert('Ошибка запроса к DaData'); }
     setDadataLoading(false);
@@ -420,6 +420,10 @@ export default function Tenants({ onNavigate, highlightId }) {
                     {declLoading ? '...' : '📝 Склонить'}
                   </button>
                 </div>
+              </div>
+              <div className="form-group"><label>Действует на основании</label>
+                <input value={form.basis || ''} onChange={e => setForm({...form, basis: e.target.value})}
+                  placeholder={form.type === 'ИП' ? 'Свидетельства о регистрации' : 'Устава'} />
               </div>
             </>}
 
