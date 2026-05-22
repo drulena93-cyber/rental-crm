@@ -4,6 +4,8 @@ import { supabase } from '../supabaseClient';
 export default function Settings() {
   const [orgs, setOrgs] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [docTypes, setDocTypes] = useState([]);
+  const [newDocType, setNewDocType] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
@@ -17,6 +19,7 @@ export default function Settings() {
     const { data: orgsData } = await supabase.from('organizations').select('*').order('name');
     setOrgs(orgsData || []);
     await fetchTemplates();
+    await fetchDocTypes();
     setLoading(false);
   }
 
@@ -28,6 +31,38 @@ export default function Settings() {
     } catch(e) {
       setTemplates([]);
     }
+  }
+
+  async function fetchDocTypes() {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT * FROM document_types ORDER BY created_at`, params: [] })
+    });
+    const data = await res.json();
+    setDocTypes(data.rows || []);
+  }
+
+  async function addDocType() {
+    if (!newDocType.trim()) return alert('Введите название типа');
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `INSERT INTO document_types (name) VALUES ($1) ON CONFLICT DO NOTHING`, params: [newDocType.trim()] })
+    });
+    setNewDocType('');
+    fetchDocTypes();
+  }
+
+  async function deleteDocType(id, name) {
+    if (['Договор','Акт','Другое'].includes(name)) return alert('Этот тип нельзя удалить');
+    if (!window.confirm(`Удалить тип "${name}"?`)) return;
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `DELETE FROM document_types WHERE id = $1`, params: [id] })
+    });
+    fetchDocTypes();
   }
 
   function openAdd() {
@@ -139,8 +174,32 @@ export default function Settings() {
         </div>
       )}
 
-      <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Шаблоны документов</div>
+      {/* Типы документов */}
+      <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Типы документов</div>
+      <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:24}}>
+        <div style={{display:'flex', gap:8, marginBottom:16}}>
+          <input value={newDocType} onChange={e => setNewDocType(e.target.value)}
+            placeholder="Новый тип документа..."
+            style={{flex:1, padding:'7px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}
+            onKeyDown={e => { if(e.key === 'Enter') addDocType(); }}
+          />
+          <button className="btn-add" onClick={addDocType}>+ Добавить</button>
+        </div>
+        <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+          {docTypes.map(dt => (
+            <div key={dt.id} style={{display:'flex', alignItems:'center', gap:6, background:'#f4f4f8', borderRadius:6, padding:'4px 10px', fontSize:13}}>
+              <span>{dt.name}</span>
+              {!['Договор','Акт','Другое'].includes(dt.name) && (
+                <button onClick={() => deleteDocType(dt.id, dt.name)}
+                  style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:12, padding:0}}>✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
 
+      {/* Шаблоны документов */}
+      <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Шаблоны документов</div>
       <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:16}}>
         <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:16}}>
           <button className="btn-add" onClick={() => fileRef.current.click()} disabled={uploading}>
@@ -149,7 +208,6 @@ export default function Settings() {
           <span style={{fontSize:12, color:'#888'}}>Поддерживаются файлы .docx, .doc, .pdf</span>
           <input ref={fileRef} type="file" accept=".docx,.doc,.pdf" style={{display:'none'}} onChange={uploadTemplate} />
         </div>
-
         {templates.length === 0 ? (
           <div style={{color:'#aaa', fontSize:13, textAlign:'center', padding:20}}>Шаблоны не загружены</div>
         ) : (
