@@ -212,7 +212,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         объект_стоимость: objData?.rent ? objData.rent.toLocaleString('ru-RU') : '',
         объект_стоимость_прописью: numberToWords(objData?.rent || 0),
         объект_этаж: objData?.floor || '',
-        объект_адрес: objData?.address || objData?.name || '',
+        объект_адрес: objData?.address || '',
       });
 
       const blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
