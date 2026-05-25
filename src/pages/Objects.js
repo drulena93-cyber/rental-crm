@@ -1,5 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+
+const PAGE_SIZE = 50;
+const CACHE_KEY = 'objects_cache';
+const CACHE_TIME_KEY = 'objects_cache_time';
+const CACHE_TTL = 60 * 1000; // 1 минута
 
 async function dbQuery(sql, params = []) {
   const res = await fetch('/api/db', {
@@ -116,11 +121,7 @@ function HistorySection({ objectId, tenants, onNavigate }) {
         <table style={{fontSize:12}}>
           <thead>
             <tr>
-              <th>Арендатор</th>
-              <th>С</th>
-              <th>По</th>
-              <th>Комментарий</th>
-              <th style={{width:40}}></th>
+              <th>Арендатор</th><th>С</th><th>По</th><th>Комментарий</th><th style={{width:40}}></th>
             </tr>
           </thead>
           <tbody>
@@ -156,10 +157,12 @@ export default function Objects({ onNavigate, highlightId }) {
   const [filterFloor, setFilterFloor] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterShared, setFilterShared] = useState('');
+  const [filterTenant, setFilterTenant] = useState('');
   const [selected, setSelected] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingStatus, setEditingStatus] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [editingValue, setEditingValue] = useState('');
@@ -172,11 +175,15 @@ export default function Objects({ onNavigate, highlightId }) {
   const [selectedObjectForTenants, setSelectedObjectForTenants] = useState(null);
   const [objectTenantsList, setObjectTenantsList] = useState([]);
   const [addingTenant, setAddingTenant] = useState('');
-const [showNewTenantFromObject, setShowNewTenantFromObject] = useState(false);
-const [newTenantForm, setNewTenantForm] = useState({});
-const [filterTenant, setFilterTenant] = useState('');
+  const [showNewTenantFromObject, setShowNewTenantFromObject] = useState(false);
+  const [newTenantForm, setNewTenantForm] = useState({});
+  const [page, setPage] = useState(() => {
+    const saved = localStorage.getItem('objects_page');
+    return saved ? parseInt(saved) : 1;
+  });
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(false); }, []);
 
   useEffect(() => {
     if (highlightId && objects.length > 0) {
@@ -185,17 +192,53 @@ const [filterTenant, setFilterTenant] = useState('');
     }
   }, [highlightId, objects]);
 
-  async function fetchAll() {
-    setLoading(true);
+  // Сохраняем страницу в localStorage
+  useEffect(() => {
+    localStorage.setItem('objects_page', String(page));
+  }, [page]);
+
+  // Сбрасываем страницу при изменении фильтров
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterStatus, filterFloor, filterType, filterShared, filterTenant]);
+
+  async function fetchAll(forceRefresh = false) {
+    // Проверяем кэш
+    if (!forceRefresh) {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+      if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
+        try {
+          const { objs, tens, ot, noteVal } = JSON.parse(cached);
+          setObjects(objs || []);
+          setTenants(tens || []);
+          setObjectTenants(ot || []);
+          setNote(noteVal || '');
+          setLastUpdated(new Date(parseInt(cachedTime)));
+          setLoading(false);
+          return;
+        } catch(e) {}
+      }
+    }
+
+    forceRefresh ? setRefreshing(true) : setLoading(true);
+
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
     const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
     const { data: noteData } = await supabase.from('settings').select('value').eq('id', 'objects_note').single();
     const ot = await dbQuery(`SELECT ot.*, t.name as tenant_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id WHERE t.deleted_at IS NULL`);
+
+    const now = Date.now();
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ objs, tens, ot, noteVal: noteData?.value || '' }));
+    localStorage.setItem(CACHE_TIME_KEY, String(now));
+
     setObjects(objs || []);
     setTenants(tens || []);
     setObjectTenants(ot || []);
     setNote(noteData?.value || '');
+    setLastUpdated(new Date(now));
     setLoading(false);
+    setRefreshing(false);
   }
 
   async function fetchObjectTenants(objectId) {
@@ -214,7 +257,7 @@ const [filterTenant, setFilterTenant] = useState('');
     if (!tenantId) return;
     await dbQuery(`INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`, [selectedObjectForTenants.id, tenantId]);
     await fetchObjectTenants(selectedObjectForTenants.id);
-    await fetchAll();
+    await fetchAll(true);
     setAddingTenant('');
   }
 
@@ -222,14 +265,14 @@ const [filterTenant, setFilterTenant] = useState('');
     if (!window.confirm('Убрать арендатора с объекта?')) return;
     await dbQuery(`DELETE FROM object_tenants WHERE id = $1`, [id]);
     await fetchObjectTenants(selectedObjectForTenants.id);
-    await fetchAll();
+    await fetchAll(true);
   }
 
   async function setPrimaryTenant(id) {
     await dbQuery(`UPDATE object_tenants SET is_primary = false WHERE object_id = $1`, [selectedObjectForTenants.id]);
     await dbQuery(`UPDATE object_tenants SET is_primary = true WHERE id = $1`, [id]);
     await fetchObjectTenants(selectedObjectForTenants.id);
-    await fetchAll();
+    await fetchAll(true);
   }
 
   async function saveNewTenantFromObject() {
@@ -256,7 +299,7 @@ const [filterTenant, setFilterTenant] = useState('');
     }
     setShowNewTenantFromObject(false);
     setNewTenantForm({});
-    fetchAll();
+    fetchAll(true);
   }
 
   function handleSort(field) {
@@ -271,6 +314,7 @@ const [filterTenant, setFilterTenant] = useState('');
 
   const types = [...new Set(objects.map(o => o.type).filter(Boolean))];
   const floors = [...new Set(objects.map(o => o.floor).filter(Boolean))].sort((a,b)=>a-b);
+  const getObjectTenants = (id) => objectTenants.filter(ot => ot.object_id === id);
 
   const filtered = objects.filter(o => {
     if (search && !o.name?.toLowerCase().includes(search.toLowerCase())) return false;
@@ -278,8 +322,8 @@ const [filterTenant, setFilterTenant] = useState('');
     if (filterFloor && o.floor !== parseInt(filterFloor)) return false;
     if (filterType && o.type !== filterType) return false;
     if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
-if (filterTenant && !getObjectTenants(o.id).find(ot => ot.tenant_id === filterTenant)) return false;
-return true;
+    if (filterTenant && !getObjectTenants(o.id).find(ot => ot.tenant_id === filterTenant)) return false;
+    return true;
   }).sort((a, b) => {
     let va = a[sortField], vb = b[sortField];
     if (va == null) va = ''; if (vb == null) vb = '';
@@ -287,19 +331,37 @@ return true;
     return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
   });
 
+  // Пагинация
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const rented = objects.filter(o => o.status === 'Сдано');
   const free = objects.filter(o => o.status === 'Не сдано');
-  const getObjectTenants = (id) => objectTenants.filter(ot => ot.object_id === id);
 
   async function quickUpdate(id, field, value) {
     const now = new Date().toISOString();
     await supabase.from('objects').update({ [field]: value, updated_at: now }).eq('id', id);
-    setObjects(objects.map(o => o.id === id ? { ...o, [field]: value, updated_at: now } : o));
+    const updated = objects.map(o => o.id === id ? { ...o, [field]: value, updated_at: now } : o);
+    setObjects(updated);
+    // Обновляем кэш
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      try {
+        const data = JSON.parse(cached);
+        data.objs = updated;
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+      } catch(e) {}
+    }
     setEditingField(null);
   }
 
-  function openAdd() {   setForm({ status: 'Не сдано', shared: false, address: 'Г.САРАТОВ. ' });   setShowForm(true); }
-  function openEdit(o) {   const autoAddress = o.address || `Г.САРАТОВ. ${o.type ? o.type + '. ' : ''}${o.name}${o.floor ? ', ' + o.floor + ' этаж' : ''}${o.area ? ', ' + o.area + ' кв. м.' : ''}`;   setForm({ ...o, address: autoAddress });   setShowForm(true);   setSelected(null); }
+  function openAdd() { setForm({ status: 'Не сдано', shared: false, address: 'Г.САРАТОВ. ' }); setShowForm(true); }
+  function openEdit(o) {
+    const autoAddress = o.address || `Г.САРАТОВ. ${o.type ? o.type + '. ' : ''}${o.name}${o.floor ? ', ' + o.floor + ' этаж' : ''}${o.area ? ', ' + o.area + ' кв. м.' : ''}`;
+    setForm({ ...o, address: autoAddress });
+    setShowForm(true);
+    setSelected(null);
+  }
 
   async function saveForm() {
     if (!form.name) return alert('Введите название объекта');
@@ -307,14 +369,14 @@ return true;
     if (form.id) await supabase.from('objects').update({ ...form, updated_at: now }).eq('id', form.id);
     else await supabase.from('objects').insert({ ...form, updated_at: now });
     setShowForm(false);
-    fetchAll();
+    fetchAll(true);
   }
 
   async function deleteObj(id) {
     if (!window.confirm('Переместить объект в корзину?')) return;
     await supabase.from('objects').update({ deleted_at: new Date().toISOString() }).eq('id', id);
     setSelected(null);
-    fetchAll();
+    fetchAll(true);
   }
 
   function statusBadge(o) {
@@ -368,133 +430,175 @@ return true;
           {floors.map(f => <option key={f} value={f}>{f} этаж</option>)}
         </select>
         <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
-  <option value="">Все арендаторы</option>
-  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-</select>              
-<select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
-  <option value="">Совместное: все</option>
-  <option value="да">Да</option><option value="нет">Нет</option>
-</select>
+          <option value="">Все арендаторы</option>
+          {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
+          <option value="">Совместное: все</option>
+          <option value="да">Да</option><option value="нет">Нет</option>
+        </select>
         <button className="btn-add" onClick={openAdd}>+ Добавить объект</button>
+        <button onClick={() => fetchAll(true)} disabled={refreshing}
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+          {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
+        </button>
       </div>
 
-      {loading ? <p>Загрузка...</p> : (
-        <div style={{overflowX:'auto'}}>
-          <table>
-            <thead>
-              <tr>
-                <th style={thStyle} onClick={() => handleSort('name')}>Название{sortIcon('name')}</th>
-                <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
-                <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
-                <th style={thStyle} onClick={() => handleSort('floor')}>Этаж{sortIcon('floor')}</th>
-                <th style={thStyle} onClick={() => handleSort('area')}>Площадь{sortIcon('area')}</th>
-                <th>Арендаторы</th>
-                <th style={thStyle} onClick={() => handleSort('rent')}>₽/мес{sortIcon('rent')}</th>
-                <th style={thStyle} onClick={() => handleSort('utility_cost')}>Коммуналка ₽{sortIcon('utility_cost')}</th>
-                <th>Вид коммуналки</th>
-                <th style={thStyle} onClick={() => handleSort('payment')}>Оплата{sortIcon('payment')}</th>
-                <th>Совместное</th>
-                <th>Комментарии</th>
-                <th style={thStyle} onClick={() => handleSort('updated_at')}>Изменён{sortIcon('updated_at')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(o => {
-                const ots = getObjectTenants(o.id);
-                return (
-                  <tr key={o.id} onClick={() => setSelected(o)}>
-                    <td>{o.name}</td>
-                    <td>{o.type}</td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {editingStatus === o.id ? (
-                        <select autoFocus value={o.status||''} onChange={e => { quickUpdate(o.id, 'status', e.target.value); setEditingStatus(null); }} onBlur={() => setEditingStatus(null)}>
-                          <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
-                        </select>
-                      ) : statusBadge(o)}
-                    </td>
-                    <td>{o.floor || '—'}</td>
-                    <td>{o.area ? `${o.area} м²` : '—'}</td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <div style={{display:'flex', flexDirection:'column', gap:2}}>
-                        {ots.length === 0 && <span style={{color:'#aaa'}}>—</span>}
-                        {ots.map(ot => (
-                          <span key={ot.id} style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline', fontSize:12, display:'flex', alignItems:'center', gap:4}}
-                            onClick={() => onNavigate('tenants', ot.tenant_id)}>
-                            {ot.is_primary && <span style={{color:'#f59e0b', fontSize:10}}>★</span>}
-                            {ot.tenant_name}
-                          </span>
-                        ))}
-                        <span style={{color:'#534AB7', cursor:'pointer', fontSize:11, marginTop:2}} onClick={() => openTenantsModal(o)}>✎ изменить</span>
-                      </div>
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {editingField === o.id+'_rent' ? (
-                        <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                          onBlur={() => quickUpdate(o.id, 'rent', parseFloat(editingValue))}
-                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'rent', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
-                          style={{width:90}} />
-                      ) : (
-                        <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_rent'); setEditingValue(o.rent||''); }}>
-                          {o.rent ? o.rent.toLocaleString('ru-RU')+' ₽' : '— ✎'}
-                        </span>
-                      )}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {editingField === o.id+'_utility' ? (
-                        <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                          onBlur={() => quickUpdate(o.id, 'utility_cost', parseFloat(editingValue))}
-                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'utility_cost', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
-                          style={{width:90}} />
-                      ) : (
-                        <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_utility'); setEditingValue(o.utility_cost||''); }}>
-                          {o.utility_cost ? o.utility_cost.toLocaleString('ru-RU')+' ₽' : '— ✎'}
-                        </span>
-                      )}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <select value={o.utility_type||''} onChange={e => quickUpdate(o.id, 'utility_type', e.target.value)}
-                        style={{fontSize:12, border:'1px solid #ddd', borderRadius:4, padding:'2px 4px'}}>
-                        <option value="">Не указано</option>
-                        <option>Фиксированная</option><option>По счётчику</option>
-                      </select>
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {editingField === o.id+'_payment' ? (
-                        <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                          onBlur={() => quickUpdate(o.id, 'payment', editingValue)}
-                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'payment', editingValue); if(e.key==='Escape') setEditingField(null); }}
-                          style={{width:120}} />
-                      ) : (
-                        <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_payment'); setEditingValue(o.payment||''); }}>
-                          {o.payment || '— ✎'}
-                        </span>
-                      )}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={o.shared||false} onChange={e => quickUpdate(o.id, 'shared', e.target.checked)} />
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {editingField === o.id+'_comments' ? (
-                        <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                          onBlur={() => quickUpdate(o.id, 'comments', editingValue)}
-                          onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'comments', editingValue); if(e.key==='Escape') setEditingField(null); }}
-                          style={{width:120}} />
-                      ) : (
-                        <span style={{cursor:'pointer', maxWidth:120, display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
-                          title={o.comments} onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
-                          {o.comments || '— ✎'}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{formatDateTime(o.updated_at)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {lastUpdated && (
+        <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>
+          Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
         </div>
       )}
-      <div className="page-info">Показано {filtered.length} из {objects.length}</div>
+
+      {loading ? <p>Загрузка...</p> : (
+        <>
+          <div style={{overflowX:'auto'}}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={thStyle} onClick={() => handleSort('name')}>Название{sortIcon('name')}</th>
+                  <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
+                  <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
+                  <th style={thStyle} onClick={() => handleSort('floor')}>Этаж{sortIcon('floor')}</th>
+                  <th style={thStyle} onClick={() => handleSort('area')}>Площадь{sortIcon('area')}</th>
+                  <th>Арендаторы</th>
+                  <th style={thStyle} onClick={() => handleSort('rent')}>₽/мес{sortIcon('rent')}</th>
+                  <th style={thStyle} onClick={() => handleSort('utility_cost')}>Коммуналка ₽{sortIcon('utility_cost')}</th>
+                  <th>Вид коммуналки</th>
+                  <th style={thStyle} onClick={() => handleSort('payment')}>Оплата{sortIcon('payment')}</th>
+                  <th>Совместное</th>
+                  <th>Комментарии</th>
+                  <th style={thStyle} onClick={() => handleSort('updated_at')}>Изменён{sortIcon('updated_at')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.map(o => {
+                  const ots = getObjectTenants(o.id);
+                  return (
+                    <tr key={o.id} onClick={() => setSelected(o)}>
+                      <td>{o.name}</td>
+                      <td>{o.type}</td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {editingStatus === o.id ? (
+                          <select autoFocus value={o.status||''} onChange={e => { quickUpdate(o.id, 'status', e.target.value); setEditingStatus(null); }} onBlur={() => setEditingStatus(null)}>
+                            <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
+                          </select>
+                        ) : statusBadge(o)}
+                      </td>
+                      <td>{o.floor || '—'}</td>
+                      <td>{o.area ? `${o.area} м²` : '—'}</td>
+                      <td onClick={e => e.stopPropagation()}>
+                        <div style={{display:'flex', flexDirection:'column', gap:2}}>
+                          {ots.length === 0 && <span style={{color:'#aaa'}}>—</span>}
+                          {ots.map(ot => (
+                            <span key={ot.id} style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline', fontSize:12, display:'flex', alignItems:'center', gap:4}}
+                              onClick={() => onNavigate('tenants', ot.tenant_id)}>
+                              {ot.is_primary && <span style={{color:'#f59e0b', fontSize:10}}>★</span>}
+                              {ot.tenant_name}
+                            </span>
+                          ))}
+                          <span style={{color:'#534AB7', cursor:'pointer', fontSize:11, marginTop:2}} onClick={() => openTenantsModal(o)}>✎ изменить</span>
+                        </div>
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {editingField === o.id+'_rent' ? (
+                          <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
+                            onBlur={() => quickUpdate(o.id, 'rent', parseFloat(editingValue))}
+                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'rent', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
+                            style={{width:90}} />
+                        ) : (
+                          <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_rent'); setEditingValue(o.rent||''); }}>
+                            {o.rent ? o.rent.toLocaleString('ru-RU')+' ₽' : '— ✎'}
+                          </span>
+                        )}
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {editingField === o.id+'_utility' ? (
+                          <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
+                            onBlur={() => quickUpdate(o.id, 'utility_cost', parseFloat(editingValue))}
+                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'utility_cost', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
+                            style={{width:90}} />
+                        ) : (
+                          <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_utility'); setEditingValue(o.utility_cost||''); }}>
+                            {o.utility_cost ? o.utility_cost.toLocaleString('ru-RU')+' ₽' : '— ✎'}
+                          </span>
+                        )}
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        <select value={o.utility_type||''} onChange={e => quickUpdate(o.id, 'utility_type', e.target.value)}
+                          style={{fontSize:12, border:'1px solid #ddd', borderRadius:4, padding:'2px 4px'}}>
+                          <option value="">Не указано</option>
+                          <option>Фиксированная</option><option>По счётчику</option>
+                        </select>
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {editingField === o.id+'_payment' ? (
+                          <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
+                            onBlur={() => quickUpdate(o.id, 'payment', editingValue)}
+                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'payment', editingValue); if(e.key==='Escape') setEditingField(null); }}
+                            style={{width:120}} />
+                        ) : (
+                          <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_payment'); setEditingValue(o.payment||''); }}>
+                            {o.payment || '— ✎'}
+                          </span>
+                        )}
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={o.shared||false} onChange={e => quickUpdate(o.id, 'shared', e.target.checked)} />
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {editingField === o.id+'_comments' ? (
+                          <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
+                            onBlur={() => quickUpdate(o.id, 'comments', editingValue)}
+                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'comments', editingValue); if(e.key==='Escape') setEditingField(null); }}
+                            style={{width:120}} />
+                        ) : (
+                          <span style={{cursor:'pointer', maxWidth:120, display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
+                            title={o.comments} onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
+                            {o.comments || '— ✎'}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{formatDateTime(o.updated_at)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Пагинация */}
+          {totalPages > 1 && (
+            <div style={{display:'flex', alignItems:'center', gap:8, marginTop:12, justifyContent:'center'}}>
+              <button onClick={() => setPage(1)} disabled={page === 1}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>
+                «
+              </button>
+              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>
+                ‹
+              </button>
+              {Array.from({length: totalPages}, (_, i) => i+1).filter(p => Math.abs(p - page) <= 2).map(p => (
+                <button key={p} onClick={() => setPage(p)}
+                  style={{background: p===page ? '#534AB7' : '#f4f4f8', color: p===page ? '#fff' : '#333',
+                    border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, fontWeight: p===page?600:400}}>
+                  {p}
+                </button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>
+                ›
+              </button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>
+                »
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="page-info">Показано {((page-1)*PAGE_SIZE)+1}–{Math.min(page*PAGE_SIZE, filtered.length)} из {filtered.length} (всего {objects.length})</div>
 
       {showTenantsModal && selectedObjectForTenants && (
         <div className="modal-overlay" onClick={() => setShowTenantsModal(false)}>
@@ -606,7 +710,8 @@ return true;
             <div className="detail-row"><div className="detail-key">Коммуналка</div><div className="detail-val">{selected.utility_cost ? selected.utility_cost.toLocaleString('ru-RU')+' ₽' : '—'} {selected.utility_type ? `(${selected.utility_type})` : ''}</div></div>
             <div className="detail-row"><div className="detail-key">Оплата помещения</div><div className="detail-val">{selected.payment||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
-            <div className="detail-row"><div className="detail-key">Адрес для договора</div><div className="detail-val" style={{fontSize:12}}>{selected.address||'—'}</div></div> <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Адрес для договора</div><div className="detail-val" style={{fontSize:12}}>{selected.address||'—'}</div></div>
+            <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Изменён</div><div className="detail-val">{formatDateTime(selected.updated_at)}</div></div>
             <div className="linked-section">
@@ -667,10 +772,10 @@ return true;
                 </select>
               </div>
             </div>
-                <div className="form-group"><label>Адрес для договора</label>
-  <input value={form.address||''} onChange={e => setForm({...form, address: e.target.value})}
-    placeholder="Г.САРАТОВ.УЛ.2-Я ВЫСЕЛОЧНАЯ ЗД.21стр.1. ОФ №1, 3 этаж, 21,0 кв. м." />
-</div>
+            <div className="form-group"><label>Адрес для договора</label>
+              <input value={form.address||''} onChange={e => setForm({...form, address: e.target.value})}
+                placeholder="Г.САРАТОВ.УЛ.2-Я ВЫСЕЛОЧНАЯ ЗД.21стр.1. ОФ №1, 3 этаж, 21,0 кв. м." />
+            </div>
             <div className="form-group"><label>Ссылка на Яндекс Диск</label><input value={form.yandex_link||''} onChange={e => setForm({...form, yandex_link: e.target.value})} placeholder="https://disk.yandex.ru/..." /></div>
             <div className="form-group"><label>Комментарии</label><textarea rows={2} value={form.comments||''} onChange={e => setForm({...form, comments: e.target.value})} /></div>
             <div className="form-group"><label><input type="checkbox" checked={form.shared||false} onChange={e => setForm({...form, shared: e.target.checked})} /> Совместное пользование</label></div>
