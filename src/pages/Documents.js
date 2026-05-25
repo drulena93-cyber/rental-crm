@@ -213,6 +213,11 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         объект_стоимость_прописью: numberToWords(objData?.rent || 0),
         объект_этаж: objData?.floor || '',
         объект_адрес: objData?.address || '',
+        арендодатель_директор_краткий: org?.director_short || org?.director || '',
+арендатор_директор_им: tenant?.director || tenant?.name || '',
+арендодатель_банк: org?.bank || '',
+арендатор_кс: tenant?.corr_account || '',
+арендатор_бик: tenant?.bik || '',
       });
 
       const blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -243,8 +248,15 @@ export default function Documents({ tenantId, tenantName, onClose }) {
       });
 
       if (contractForm.дата_договора) {
-        await supabase.from('tenants').update({ contract_start: contractForm.дата_договора }).eq('id', tenantId);
-      }
+  const startDate = new Date(contractForm.дата_договора);
+  const endDate = new Date(startDate);
+  endDate.setMonth(endDate.getMonth() + 11);
+  const endDateStr = endDate.toISOString().split('T')[0];
+  await supabase.from('tenants').update({ 
+    contract_start: contractForm.дата_договора,
+    contract_end: endDateStr
+  }).eq('id', tenantId);
+}
 
       saveAs(blob, filename);
       setShowContractForm(false);
