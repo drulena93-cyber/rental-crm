@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 30;
 const CACHE_KEY = 'objects_cache';
 const CACHE_TIME_KEY = 'objects_cache_time';
 const CACHE_TTL = 60 * 1000; // 1 минута
