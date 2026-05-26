@@ -139,9 +139,10 @@ export default function Documents({ tenantId, tenantName, onClose }) {
       const result = await uploadToYandex(base64, safeName, `Документы/${tenantName}`);
       if (!result.success) { alert('Ошибка загрузки: ' + result.error); setUploading(false); return; }
       await supabase.from('documents').insert({
-        tenant_id: tenantId, name: uploadForm.name, type: uploadForm.type,
-        file_path: result.public_url, file_size: file.size, yandex_path: result.path,
-      });
+  tenant_id: tenantId, name: docName, type: docType,
+  file_path: result.public_url || '', file_size: blob.size, yandex_path: result.path || '',
+  description: invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', '),
+});
       setShowUploadForm(false);
       setUploadForm({ name: '', type: 'Договор' });
       fetchAll();
