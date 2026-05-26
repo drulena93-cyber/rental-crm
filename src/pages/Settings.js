@@ -10,6 +10,10 @@ export default function Settings() {
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [defaultInvoiceTemplate, setDefaultInvoiceTemplate] = useState('');
+  const [defaultActTemplate, setDefaultActTemplate] = useState('');
+  const [defaultContractTemplate, setDefaultContractTemplate] = useState('');
+  const [savingDefaults, setSavingDefaults] = useState(false);
   const fileRef = useRef();
 
   useEffect(() => { fetchAll(); }, []);
@@ -20,6 +24,7 @@ export default function Settings() {
     setOrgs(orgsData || []);
     await fetchTemplates();
     await fetchDocTypes();
+    await fetchDefaults();
     setLoading(false);
   }
 
@@ -28,9 +33,7 @@ export default function Settings() {
       const res = await fetch('/api/yandex-templates');
       const data = await res.json();
       setTemplates(data.items || []);
-    } catch(e) {
-      setTemplates([]);
-    }
+    } catch(e) { setTemplates([]); }
   }
 
   async function fetchDocTypes() {
@@ -41,6 +44,30 @@ export default function Settings() {
     });
     const data = await res.json();
     setDocTypes(data.rows || []);
+  }
+
+  async function fetchDefaults() {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT id, value FROM settings WHERE id IN ('default_invoice_template', 'default_act_template', 'default_contract_template')`, params: [] })
+    });
+    const data = await res.json();
+    const rows = data.rows || [];
+    setDefaultInvoiceTemplate(rows.find(r => r.id === 'default_invoice_template')?.value || '');
+    setDefaultActTemplate(rows.find(r => r.id === 'default_act_template')?.value || '');
+    setDefaultContractTemplate(rows.find(r => r.id === 'default_contract_template')?.value || '');
+  }
+
+  async function saveDefaults() {
+    setSavingDefaults(true);
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `INSERT INTO settings (id, value) VALUES ('default_invoice_template', $1), ('default_act_template', $2), ('default_contract_template', $3) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`, params: [defaultInvoiceTemplate, defaultActTemplate, defaultContractTemplate] })
+    });
+    setSavingDefaults(false);
+    alert('Шаблоны по умолчанию сохранены!');
   }
 
   async function addDocType() {
@@ -111,9 +138,7 @@ export default function Settings() {
       const data = await res.json();
       if (!data.success) alert('Ошибка загрузки: ' + data.error);
       await fetchTemplates();
-    } catch(e) {
-      alert('Ошибка: ' + e.message);
-    }
+    } catch(e) { alert('Ошибка: ' + e.message); }
     setUploading(false);
     e.target.value = '';
   }
@@ -173,6 +198,37 @@ export default function Settings() {
           ))}
         </div>
       )}
+
+      {/* Шаблоны по умолчанию */}
+      <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Шаблоны по умолчанию</div>
+      <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:24}}>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:12}}>
+          <div className="form-group">
+            <label>Шаблон договора</label>
+            <select value={defaultContractTemplate} onChange={e => setDefaultContractTemplate(e.target.value)}>
+              <option value="">— Не выбран —</option>
+              {templates.map(t => <option key={t.name} value={t.path}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Шаблон счёта</label>
+            <select value={defaultInvoiceTemplate} onChange={e => setDefaultInvoiceTemplate(e.target.value)}>
+              <option value="">— Не выбран —</option>
+              {templates.map(t => <option key={t.name} value={t.path}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Шаблон акта</label>
+            <select value={defaultActTemplate} onChange={e => setDefaultActTemplate(e.target.value)}>
+              <option value="">— Не выбран —</option>
+              {templates.map(t => <option key={t.name} value={t.path}>{t.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <button className="btn-save" onClick={saveDefaults} disabled={savingDefaults}>
+          {savingDefaults ? 'Сохраняется...' : '💾 Сохранить'}
+        </button>
+      </div>
 
       {/* Типы документов */}
       <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Типы документов</div>
