@@ -9,22 +9,27 @@ import AllDocuments from './pages/AllDocuments';
 import './App.css';
 
 export default function App() {
-  const [tab, setTab] = useState('objects');
+  const [tab, setTab] = useState(() => localStorage.getItem('active_tab') || 'objects');
   const [highlightId, setHighlightId] = useState(null);
   const [contactTenantId, setContactTenantId] = useState(null);
 
+  function changeTab(newTab) {
+    setTab(newTab);
+    localStorage.setItem('active_tab', newTab);
+  }
+
   function handleNavigate(section, id) {
     if (section === 'tenants') {
-      setTab('tenants');
+      changeTab('tenants');
       setHighlightId(id);
     } else if (section === 'objects') {
-      setTab('objects');
+      changeTab('objects');
       setHighlightId(id);
     } else if (section === 'contacts') {
-      setTab('contacts');
+      changeTab('contacts');
       setContactTenantId(id);
     } else if (section === 'analytics') {
-      setTab('analytics');
+      changeTab('analytics');
     }
   }
 
@@ -33,13 +38,13 @@ export default function App() {
       <div className="topbar">
         <div className="logo">🏢 CRM Аренда</div>
         <nav className="tabs">
-          <button className={tab === 'objects' ? 'active' : ''} onClick={() => setTab('objects')}>Объекты</button>
-          <button className={tab === 'tenants' ? 'active' : ''} onClick={() => setTab('tenants')}>Арендаторы</button>
-          <button className={tab === 'contacts' ? 'active' : ''} onClick={() => setTab('contacts')}>Контакты</button>
-          <button className={tab === 'documents' ? 'active' : ''} onClick={() => setTab('documents')}>📄 Документы</button>
-          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>Аналитика</button>
-          <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
-          <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>⚙️ Настройки</button>
+          <button className={tab === 'objects' ? 'active' : ''} onClick={() => changeTab('objects')}>Объекты</button>
+          <button className={tab === 'tenants' ? 'active' : ''} onClick={() => changeTab('tenants')}>Арендаторы</button>
+          <button className={tab === 'contacts' ? 'active' : ''} onClick={() => changeTab('contacts')}>Контакты</button>
+          <button className={tab === 'documents' ? 'active' : ''} onClick={() => changeTab('documents')}>📄 Документы</button>
+          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => changeTab('analytics')}>Аналитика</button>
+          <button className={tab === 'trash' ? 'active' : ''} onClick={() => changeTab('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => changeTab('settings')}>⚙️ Настройки</button>
         </nav>
       </div>
       <div className="content">
