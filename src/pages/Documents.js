@@ -63,7 +63,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
 
   async function fetchAll() {
     setLoading(true);
-    const { data: docs } = await supabase.from('documents').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
+    const { data: docs } = await supabase.from('documents').select('*, items').eq('tenant_id', tenantId).order('created_at', { ascending: false });
     const { data: orgs } = await supabase.from('organizations').select('*').order('name');
     const { data: ten } = await supabase.from('tenants').select('*').eq('id', tenantId).single();
     setDocuments(docs || []);
