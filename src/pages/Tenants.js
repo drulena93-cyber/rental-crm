@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import Documents from './Documents';
 
+const PAGE_SIZE = 30;
+const CACHE_KEY = 'tenants_cache';
+const CACHE_TIME_KEY = 'tenants_cache_time';
+const CACHE_TTL = 60 * 1000;
+
 export default function Tenants({ onNavigate, highlightId }) {
   const [tenants, setTenants] = useState([]);
   const [objects, setObjects] = useState([]);
@@ -16,13 +21,16 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingStatus, setEditingStatus] = useState(null);
   const [showDocuments, setShowDocuments] = useState(false);
   const [dadataLoading, setDadataLoading] = useState(false);
   const [declLoading, setDeclLoading] = useState(false);
+  const [page, setPage] = useState(() => parseInt(localStorage.getItem('tenants_page') || '1'));
+  const [lastUpdated, setLastUpdated] = useState(null);
   const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(false); }, []);
 
   useEffect(() => {
     if (highlightId && tenants.length > 0) {
@@ -31,13 +39,44 @@ export default function Tenants({ onNavigate, highlightId }) {
     }
   }, [highlightId, tenants]);
 
-  async function fetchAll() {
-    setLoading(true);
+  useEffect(() => {
+    localStorage.setItem('tenants_page', String(page));
+  }, [page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterType, filterStatus, filterShared, filterObject]);
+
+  async function fetchAll(forceRefresh = false) {
+    if (!forceRefresh) {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+      if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
+        try {
+          const { tens, objs } = JSON.parse(cached);
+          setTenants(tens || []);
+          setObjects(objs || []);
+          setLastUpdated(new Date(parseInt(cachedTime)));
+          setLoading(false);
+          return;
+        } catch(e) {}
+      }
+    }
+
+    forceRefresh ? setRefreshing(true) : setLoading(true);
+
     const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('created_at', { ascending: false });
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
+
+    const now = Date.now();
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ tens, objs }));
+    localStorage.setItem(CACHE_TIME_KEY, String(now));
+
     setTenants(tens || []);
     setObjects(objs || []);
+    setLastUpdated(new Date(now));
     setLoading(false);
+    setRefreshing(false);
   }
 
   function handleSort(field) {
@@ -65,6 +104,9 @@ export default function Tenants({ onNavigate, highlightId }) {
     }
     return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
   });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const active = tenants.filter(t => t.status === 'Активный');
   const withObj = tenants.filter(t => t.object_id);
@@ -100,7 +142,12 @@ export default function Tenants({ onNavigate, highlightId }) {
         }
       }
     }
-    setTenants(tenants.map(t => t.id === id ? { ...t, status } : t));
+    const updated = tenants.map(t => t.id === id ? { ...t, status } : t);
+    setTenants(updated);
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) { const d = JSON.parse(cached); d.tens = updated; localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }
+    } catch(e) {}
     setEditingStatus(null);
   }
 
@@ -159,14 +206,14 @@ export default function Tenants({ onNavigate, highlightId }) {
       await supabase.from('objects').update({ status: 'Сдано' }).eq('id', form.object_id);
     }
     setShowForm(false);
-    fetchAll();
+    fetchAll(true);
   }
 
   async function deleteTenant(id) {
     if (!window.confirm('Переместить арендатора в корзину?')) return;
     await supabase.from('tenants').update({ deleted_at: new Date().toISOString() }).eq('id', id);
     setSelected(null);
-    fetchAll();
+    fetchAll(true);
   }
 
   function statusBadge(t) {
@@ -226,56 +273,89 @@ export default function Tenants({ onNavigate, highlightId }) {
           <option value="да">Да</option><option value="нет">Нет</option>
         </select>
         <button className="btn-add" onClick={openAdd}>+ Добавить арендатора</button>
+        <button onClick={() => fetchAll(true)} disabled={refreshing}
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+          {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
+        </button>
       </div>
 
-      {loading ? <p>Загрузка...</p> : (
-        <table>
-          <thead>
-            <tr>
-              <th style={thStyle} onClick={() => handleSort('name')}>Название / ФИО{sortIcon('name')}</th>
-              <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
-              <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
-              <th style={thStyle} onClick={() => handleSort('activity')}>Вид деятельности{sortIcon('activity')}</th>
-              <th style={thStyle} onClick={() => handleSort('object_id')}>Объект{sortIcon('object_id')}</th>
-              <th style={thStyle} onClick={() => handleSort('contract_end')}>Окончание договора{sortIcon('contract_end')}</th>
-              <th>Контакты</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(t => {
-              const obj = getObject(t.object_id);
-              const days = daysLeft(t.contract_end);
-              return (
-                <tr key={t.id} onClick={() => setSelected(t)}>
-                  <td>{t.name}</td>
-                  <td>{typeBadge(t.type)}</td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {editingStatus === t.id ? (
-                      <select autoFocus value={t.status} onChange={e => quickUpdateStatus(t.id, e.target.value)} onBlur={() => setEditingStatus(null)}>
-                        <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
-                      </select>
-                    ) : statusBadge(t)}
-                  </td>
-                  <td>{t.activity || '—'}</td>
-                  <td onClick={e => { e.stopPropagation(); if(obj) onNavigate('objects', obj.id); }}>
-                    {obj ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>{obj.name}</span> : <span style={{color:'#aaa'}}>—</span>}
-                  </td>
-                  <td>{t.contract_end ? (
-                    <span style={{color: days <= 30 ? '#A32D2D' : 'inherit'}}>
-                      {new Date(t.contract_end).toLocaleDateString('ru-RU')}
-                      {days <= 30 && ` (${days} дн.)`}
-                    </span>
-                  ) : '—'}</td>
-                  <td onClick={e => { e.stopPropagation(); onNavigate('contacts', t.id); }}>
-                    <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>Контакты →</span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {lastUpdated && (
+        <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>
+          Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
+        </div>
       )}
-      <div className="page-info">Показано {filtered.length} из {tenants.length}</div>
+
+      {loading ? <p>Загрузка...</p> : (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th style={thStyle} onClick={() => handleSort('name')}>Название / ФИО{sortIcon('name')}</th>
+                <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
+                <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
+                <th style={thStyle} onClick={() => handleSort('activity')}>Вид деятельности{sortIcon('activity')}</th>
+                <th style={thStyle} onClick={() => handleSort('object_id')}>Объект{sortIcon('object_id')}</th>
+                <th style={thStyle} onClick={() => handleSort('contract_end')}>Окончание договора{sortIcon('contract_end')}</th>
+                <th>Контакты</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginated.map(t => {
+                const obj = getObject(t.object_id);
+                const days = daysLeft(t.contract_end);
+                return (
+                  <tr key={t.id} onClick={() => setSelected(t)}>
+                    <td>{t.name}</td>
+                    <td>{typeBadge(t.type)}</td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {editingStatus === t.id ? (
+                        <select autoFocus value={t.status} onChange={e => quickUpdateStatus(t.id, e.target.value)} onBlur={() => setEditingStatus(null)}>
+                          <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
+                        </select>
+                      ) : statusBadge(t)}
+                    </td>
+                    <td>{t.activity || '—'}</td>
+                    <td onClick={e => { e.stopPropagation(); if(obj) onNavigate('objects', obj.id); }}>
+                      {obj ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>{obj.name}</span> : <span style={{color:'#aaa'}}>—</span>}
+                    </td>
+                    <td>{t.contract_end ? (
+                      <span style={{color: days <= 30 ? '#A32D2D' : 'inherit'}}>
+                        {new Date(t.contract_end).toLocaleDateString('ru-RU')}
+                        {days <= 30 && ` (${days} дн.)`}
+                      </span>
+                    ) : '—'}</td>
+                    <td onClick={e => { e.stopPropagation(); onNavigate('contacts', t.id); }}>
+                      <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>Контакты →</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {totalPages > 1 && (
+            <div style={{display:'flex', alignItems:'center', gap:8, marginTop:12, justifyContent:'center'}}>
+              <button onClick={() => setPage(1)} disabled={page === 1}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>«</button>
+              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>‹</button>
+              {Array.from({length: totalPages}, (_, i) => i+1).filter(p => Math.abs(p - page) <= 2).map(p => (
+                <button key={p} onClick={() => setPage(p)}
+                  style={{background: p===page ? '#534AB7' : '#f4f4f8', color: p===page ? '#fff' : '#333',
+                    border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, fontWeight: p===page?600:400}}>
+                  {p}
+                </button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>›</button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>»</button>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="page-info">Показано {((page-1)*PAGE_SIZE)+1}–{Math.min(page*PAGE_SIZE, filtered.length)} из {filtered.length} (всего {tenants.length})</div>
 
       {selected && (
         <div className="modal-overlay" onClick={() => setSelected(null)}>
