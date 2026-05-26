@@ -138,10 +138,13 @@ export default function Documents({ tenantId, tenantName, onClose }) {
       const safeName = `${Date.now()}_${file.name}`;
       const result = await uploadToYandex(base64, safeName, `Документы/${tenantName}`);
       if (!result.success) { alert('Ошибка загрузки: ' + result.error); setUploading(false); return; }
-      await supabase.from('documents').insert({
-  tenant_id: tenantId, name: docName, type: docType,
-  file_path: result.public_url || '', file_size: blob.size, yandex_path: result.path || '',
-  description: description,
+      await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    params: [tenantId, docName, docType, result.public_url || '', blob.size, result.path || '', description]
+  })
 });
       setShowUploadForm(false);
       setUploadForm({ name: '', type: 'Договор' });
