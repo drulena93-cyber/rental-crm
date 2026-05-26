@@ -199,7 +199,7 @@ try {
     setInvoiceForm({ ...invoiceForm, позиции: invoiceForm.позиции.filter((_, i) => i !== idx) });
   }
 
-  async function generateFromTemplate(templatePath, docData, docName, docType, counterKey, description = '', amount = 0) {
+  async function generateFromTemplate(templatePath, docData, docName, docType, counterKey, description = '', amount = 0, items = null) {
     const tmpl = templates.find(t => t.path === templatePath);
     if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
     const dlRes = await fetch('/api/download-template', {
@@ -233,8 +233,8 @@ try {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description, amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    params: [tenantId, docName, docType, result.public_url || '', blob.size, result.path || '', description, amount]
+    query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description, amount, items) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    params: [tenantId, docName, docType, result.public_url || '', blob.size, result.path || '', description, amount, items ? JSON.stringify(items) : null]
   })
 });
 
@@ -370,7 +370,7 @@ try {
         количество_позиций: String(invoiceForm.позиции.length),
       };
       const docName = `Счёт №${invoiceForm.номер} от ${invoiceForm.дата ? new Date(invoiceForm.дата).toLocaleDateString('ru-RU') : '___'}`;
-      const desc = invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', '); await generateFromTemplate(selectedInvoiceTemplate, docData, docName, 'Счёт', 'last_number_счет', desc, итого);
+      const desc = invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', '); await generateFromTemplate(selectedInvoiceTemplate, docData, docName, 'Счёт', 'last_number_счет', desc, итого, invoiceForm.позиции);
       fetchAll();
       setShowInvoiceForm(false);
     } catch(e) { console.error(e); alert('Ошибка: ' + e.message); }
@@ -479,8 +479,19 @@ try {
                         🔗 Открыть
                       </a>
                     )}
-                    <button onClick={() => deleteDoc(doc.id)}
-                      style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>✕</button>
+                    {doc.type === 'Счёт' && doc.items && (
+  <button onClick={() => {
+    const items = typeof doc.items === 'string' ? JSON.parse(doc.items) : doc.items;
+    setInvoiceForm({ номер: invoiceForm.номер, дата: new Date().toISOString().split('T')[0], позиции: items });
+    setShowInvoiceForm(true);
+    setShowContractForm(false);
+  }}
+    style={{background:'#EAF3DE', color:'#3B6D11', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4}}>
+    📋 Акт
+  </button>
+)}
+<button onClick={() => deleteDoc(doc.id)}
+  style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>✕</button>
                   </td>
                 </tr>
               ))}
