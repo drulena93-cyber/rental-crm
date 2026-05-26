@@ -147,7 +147,7 @@ export default function AllDocuments({ onNavigate }) {
         <div className="stat"><div className="stat-label">Всего документов</div><div className="stat-val purple">{documents.length}</div></div>
         <div className="stat"><div className="stat-label">Договоров</div><div className="stat-val blue">{documents.filter(d => d.type === 'Договор').length}</div></div>
         <div className="stat"><div className="stat-label">Актов</div><div className="stat-val green">{documents.filter(d => d.type === 'Акт').length}</div></div>
-        <div className="stat"><div className="stat-label">Счетов</div><div className="stat-val">{documents.filter(d => d.type === 'Счёт').length}</div></div> <div className="stat"><div className="stat-label">Других</div><div className="stat-val">{documents.filter(d => !['Договор','Акт','Счёт'].includes(d.type)).length}</div></div>
+        <div className="stat"><div className="stat-label">Счетов</div><div className="stat-val">{documents.filter(d => d.type === 'Счёт').length}</div></div> 
       </div>
 
       <div className="toolbar">
