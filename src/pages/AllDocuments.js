@@ -147,7 +147,7 @@ export default function AllDocuments({ onNavigate }) {
         <div className="stat"><div className="stat-label">Всего документов</div><div className="stat-val purple">{documents.length}</div></div>
         <div className="stat"><div className="stat-label">Договоров</div><div className="stat-val blue">{documents.filter(d => d.type === 'Договор').length}</div></div>
         <div className="stat"><div className="stat-label">Актов</div><div className="stat-val green">{documents.filter(d => d.type === 'Акт').length}</div></div>
-        <div className="stat"><div className="stat-label">Других</div><div className="stat-val">{documents.filter(d => !['Договор','Акт'].includes(d.type)).length}</div></div>
+        <div className="stat"><div className="stat-label">Счетов</div><div className="stat-val">{documents.filter(d => d.type === 'Счёт').length}</div></div> <div className="stat"><div className="stat-label">Других</div><div className="stat-val">{documents.filter(d => !['Договор','Акт','Счёт'].includes(d.type)).length}</div></div>
       </div>
 
       <div className="toolbar">
@@ -176,15 +176,16 @@ export default function AllDocuments({ onNavigate }) {
         <>
           <table>
             <thead>
-              <tr>
-                <th style={thStyle} onClick={() => handleSort('name')}>Название документа{sortIcon('name')}</th>
-                <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
-                <th style={thStyle} onClick={() => handleSort('tenant_id')}>Арендатор{sortIcon('tenant_id')}</th>
-                <th style={thStyle} onClick={() => handleSort('file_size')}>Размер{sortIcon('file_size')}</th>
-                <th style={thStyle} onClick={() => handleSort('created_at')}>Дата создания{sortIcon('created_at')}</th>
-                <th style={{width:100}}>Действия</th>
-              </tr>
-            </thead>
+  <tr>
+    <th style={thStyle} onClick={() => handleSort('name')}>Название документа{sortIcon('name')}</th>
+    <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
+    <th style={thStyle} onClick={() => handleSort('tenant_id')}>Арендатор{sortIcon('tenant_id')}</th>
+    <th>Услуги</th>
+    <th style={thStyle} onClick={() => handleSort('file_size')}>Размер{sortIcon('file_size')}</th>
+    <th style={thStyle} onClick={() => handleSort('created_at')}>Дата создания{sortIcon('created_at')}</th>
+    <th style={{width:100}}>Действия</th>
+  </tr>
+</thead>
             <tbody>
               {paginated.length === 0 && (
                 <tr><td colSpan={6} style={{textAlign:'center', color:'#aaa', padding:30}}>Документы не найдены</td></tr>
@@ -196,6 +197,9 @@ export default function AllDocuments({ onNavigate }) {
                   <td onClick={() => onNavigate('tenants', doc.tenant_id)} style={{cursor:'pointer', color:'#534AB7', textDecoration:'underline'}}>
                     {getTenantName(doc.tenant_id)}
                   </td>
+                    <td style={{fontSize:12, color:'#555', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={doc.description}>
+  {doc.description || '—'}
+</td>
                   <td>{formatSize(doc.file_size)}</td>
                   <td style={{fontSize:12, color:'#888'}}>{new Date(doc.created_at).toLocaleDateString('ru-RU')}</td>
                   <td>
