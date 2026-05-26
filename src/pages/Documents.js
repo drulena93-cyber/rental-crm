@@ -141,7 +141,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
       await supabase.from('documents').insert({
   tenant_id: tenantId, name: docName, type: docType,
   file_path: result.public_url || '', file_size: blob.size, yandex_path: result.path || '',
-  description: invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', '),
+  description: description,
 });
       setShowUploadForm(false);
       setUploadForm({ name: '', type: 'Договор' });
@@ -185,7 +185,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     setInvoiceForm({ ...invoiceForm, позиции: invoiceForm.позиции.filter((_, i) => i !== idx) });
   }
 
-  async function generateFromTemplate(templatePath, docData, docName, docType, counterKey) {
+  async function generateFromTemplate(templatePath, docData, docName, docType, counterKey, description = '') {
     const tmpl = templates.find(t => t.path === templatePath);
     if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
     const dlRes = await fetch('/api/download-template', {
@@ -352,7 +352,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         количество_позиций: String(invoiceForm.позиции.length),
       };
       const docName = `Счёт №${invoiceForm.номер} от ${invoiceForm.дата ? new Date(invoiceForm.дата).toLocaleDateString('ru-RU') : '___'}`;
-      await generateFromTemplate(selectedInvoiceTemplate, docData, docName, 'Счёт', 'last_number_счет');
+      const desc = invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', '); await generateFromTemplate(selectedInvoiceTemplate, docData, docName, 'Счёт', 'last_number_счет', desc);
       fetchAll();
       setShowInvoiceForm(false);
     } catch(e) { console.error(e); alert('Ошибка: ' + e.message); }
