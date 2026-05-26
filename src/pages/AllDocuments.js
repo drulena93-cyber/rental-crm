@@ -181,6 +181,7 @@ export default function AllDocuments({ onNavigate }) {
     <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
     <th style={thStyle} onClick={() => handleSort('tenant_id')}>Арендатор{sortIcon('tenant_id')}</th>
     <th>Услуги</th>
+<th style={{textAlign:'right'}}>Сумма</th>
     <th style={thStyle} onClick={() => handleSort('file_size')}>Размер{sortIcon('file_size')}</th>
     <th style={thStyle} onClick={() => handleSort('created_at')}>Дата создания{sortIcon('created_at')}</th>
     <th style={{width:100}}>Действия</th>
@@ -199,6 +200,9 @@ export default function AllDocuments({ onNavigate }) {
                   </td>
                     <td style={{fontSize:12, color:'#555', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={doc.description}>
   {doc.description || '—'}
+</td>
+  <td style={{fontSize:12, textAlign:'right', whiteSpace:'nowrap'}}>
+  {doc.amount ? doc.amount.toLocaleString('ru-RU', {minimumFractionDigits:2}) + ' ₽' : '—'}
 </td>
                   <td>{formatSize(doc.file_size)}</td>
                   <td style={{fontSize:12, color:'#888'}}>{new Date(doc.created_at).toLocaleDateString('ru-RU')}</td>
