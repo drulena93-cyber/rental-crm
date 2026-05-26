@@ -77,7 +77,22 @@ export default function Documents({ tenantId, tenantName, onClose }) {
       const data = await res.json();
       setTemplates(data.items || []);
     } catch(e) { setTemplates([]); }
-
+// Загружаем шаблоны по умолчанию
+try {
+  const defRes = await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `SELECT id, value FROM settings WHERE id IN ('default_invoice_template', 'default_act_template', 'default_contract_template')`, params: [] })
+  });
+  const defData = await defRes.json();
+  const defRows = defData.rows || [];
+  const defInvoice = defRows.find(r => r.id === 'default_invoice_template')?.value || '';
+  const defAct = defRows.find(r => r.id === 'default_act_template')?.value || '';
+  const defContract = defRows.find(r => r.id === 'default_contract_template')?.value || '';
+  if (defInvoice) setSelectedInvoiceTemplate(defInvoice);
+  if (defAct) setSelectedActTemplate(defAct);
+  if (defContract) setSelectedTemplate(defContract);
+} catch(e) {}
     try {
       const dtRes = await fetch('/api/db', {
         method: 'POST',
