@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
+const PAGE_SIZE = 30;
+const CACHE_KEY = 'contacts_cache';
+const CACHE_TIME_KEY = 'contacts_cache_time';
+const CACHE_TTL = 60 * 1000;
+
 export default function Contacts({ tenantId, onNavigate }) {
   const [contacts, setContacts] = useState([]);
   const [tenants, setTenants] = useState([]);
@@ -9,20 +14,54 @@ export default function Contacts({ tenantId, onNavigate }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(() => parseInt(localStorage.getItem('contacts_page') || '1'));
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(false); }, []);
 
   useEffect(() => {
     if (tenantId) setSelectedTenant(tenantId);
   }, [tenantId]);
 
-  async function fetchAll() {
-    setLoading(true);
+  useEffect(() => {
+    localStorage.setItem('contacts_page', String(page));
+  }, [page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, selectedTenant]);
+
+  async function fetchAll(forceRefresh = false) {
+    if (!forceRefresh) {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+      if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
+        try {
+          const { cons, tens } = JSON.parse(cached);
+          setContacts(cons || []);
+          setTenants(tens || []);
+          setLastUpdated(new Date(parseInt(cachedTime)));
+          setLoading(false);
+          return;
+        } catch(e) {}
+      }
+    }
+
+    forceRefresh ? setRefreshing(true) : setLoading(true);
+
     const { data: cons } = await supabase.from('contacts').select('*').is('deleted_at', null).order('full_name');
     const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
+
+    const now = Date.now();
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ cons, tens }));
+    localStorage.setItem(CACHE_TIME_KEY, String(now));
+
     setContacts(cons || []);
     setTenants(tens || []);
+    setLastUpdated(new Date(now));
     setLoading(false);
+    setRefreshing(false);
   }
 
   const filtered = contacts.filter(c => {
@@ -31,6 +70,9 @@ export default function Contacts({ tenantId, onNavigate }) {
         !c.phone?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const getTenantName = (id) => tenants.find(t => t.id === id)?.name || '—';
 
@@ -52,14 +94,14 @@ export default function Contacts({ tenantId, onNavigate }) {
       await supabase.from('contacts').insert(form);
     }
     setShowForm(false);
-    fetchAll();
+    fetchAll(true);
   }
 
-async function deleteContact(id) {
-  if (!window.confirm('Переместить контакт в корзину?')) return;
-  await supabase.from('contacts').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-  fetchAll();
-}
+  async function deleteContact(id) {
+    if (!window.confirm('Переместить контакт в корзину?')) return;
+    await supabase.from('contacts').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    fetchAll(true);
+  }
 
   return (
     <div>
@@ -82,40 +124,73 @@ async function deleteContact(id) {
           </button>
         )}
         <button className="btn-add" onClick={openAdd}>+ Добавить контакт</button>
+        <button onClick={() => fetchAll(true)} disabled={refreshing}
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+          {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
+        </button>
       </div>
 
-      {loading ? <p>Загрузка...</p> : (
-        <table>
-          <thead>
-            <tr>
-              <th>ФИО контакта</th>
-              <th>Телефон</th>
-              <th>Должность</th>
-              <th>Арендатор</th>
-              <th>Описание</th>
-              <th style={{width:80}}>Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(c => (
-              <tr key={c.id}>
-                <td>{c.full_name || '—'}</td>
-                <td>{c.phone ? <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()}>{c.phone}</a> : '—'}</td>
-                <td>{c.position || '—'}</td>
-                <td onClick={() => onNavigate('tenants', c.tenant_id)} style={{cursor:'pointer', color:'#534AB7', textDecoration:'underline'}}>
-                  {getTenantName(c.tenant_id)}
-                </td>
-                <td>{c.description || '—'}</td>
-                <td onClick={e => e.stopPropagation()}>
-                  <button onClick={() => openEdit(c)} style={{background:'none', border:'none', cursor:'pointer', color:'#534AB7', marginRight:8}}>✎</button>
-                  <button onClick={() => deleteContact(c.id)} style={{background:'none', border:'none', cursor:'pointer', color:'#A32D2D'}}>✕</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {lastUpdated && (
+        <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>
+          Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
+        </div>
       )}
-      <div className="page-info">Показано {filtered.length} контактов</div>
+
+      {loading ? <p>Загрузка...</p> : (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th>ФИО контакта</th>
+                <th>Телефон</th>
+                <th>Должность</th>
+                <th>Арендатор</th>
+                <th>Описание</th>
+                <th style={{width:80}}>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginated.map(c => (
+                <tr key={c.id}>
+                  <td>{c.full_name || '—'}</td>
+                  <td>{c.phone ? <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()}>{c.phone}</a> : '—'}</td>
+                  <td>{c.position || '—'}</td>
+                  <td onClick={() => onNavigate('tenants', c.tenant_id)} style={{cursor:'pointer', color:'#534AB7', textDecoration:'underline'}}>
+                    {getTenantName(c.tenant_id)}
+                  </td>
+                  <td>{c.description || '—'}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <button onClick={() => openEdit(c)} style={{background:'none', border:'none', cursor:'pointer', color:'#534AB7', marginRight:8}}>✎</button>
+                    <button onClick={() => deleteContact(c.id)} style={{background:'none', border:'none', cursor:'pointer', color:'#A32D2D'}}>✕</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {totalPages > 1 && (
+            <div style={{display:'flex', alignItems:'center', gap:8, marginTop:12, justifyContent:'center'}}>
+              <button onClick={() => setPage(1)} disabled={page === 1}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>«</button>
+              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>‹</button>
+              {Array.from({length: totalPages}, (_, i) => i+1).filter(p => Math.abs(p - page) <= 2).map(p => (
+                <button key={p} onClick={() => setPage(p)}
+                  style={{background: p===page ? '#534AB7' : '#f4f4f8', color: p===page ? '#fff' : '#333',
+                    border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, fontWeight: p===page?600:400}}>
+                  {p}
+                </button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>›</button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>»</button>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="page-info">Показано {((page-1)*PAGE_SIZE)+1}–{Math.min(page*PAGE_SIZE, filtered.length)} из {filtered.length} (всего {contacts.length})</div>
 
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
