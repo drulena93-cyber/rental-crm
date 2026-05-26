@@ -184,7 +184,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
     setInvoiceForm({ ...invoiceForm, позиции: invoiceForm.позиции.filter((_, i) => i !== idx) });
   }
 
-  async function generateFromTemplate(templatePath, docData, docName, docType, counterKey, description = '') {
+  async function generateFromTemplate(templatePath, docData, docName, docType, counterKey, description = '', amount = 0) {
     const tmpl = templates.find(t => t.path === templatePath);
     if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
     const dlRes = await fetch('/api/download-template', {
@@ -218,8 +218,8 @@ export default function Documents({ tenantId, tenantName, onClose }) {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    params: [tenantId, docName, docType, result.public_url || '', blob.size, result.path || '', description]
+    query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description, amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    params: [tenantId, docName, docType, result.public_url || '', blob.size, result.path || '', description, amount]
   })
 });
 
@@ -355,7 +355,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         количество_позиций: String(invoiceForm.позиции.length),
       };
       const docName = `Счёт №${invoiceForm.номер} от ${invoiceForm.дата ? new Date(invoiceForm.дата).toLocaleDateString('ru-RU') : '___'}`;
-      const desc = invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', '); await generateFromTemplate(selectedInvoiceTemplate, docData, docName, 'Счёт', 'last_number_счет', desc);
+      const desc = invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', '); await generateFromTemplate(selectedInvoiceTemplate, docData, docName, 'Счёт', 'last_number_счет', desc, итого);
       fetchAll();
       setShowInvoiceForm(false);
     } catch(e) { console.error(e); alert('Ошибка: ' + e.message); }
@@ -398,7 +398,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         количество_позиций: String(invoiceForm.позиции.length),
       };
       const docName = `Акт №${actNum} от ${invoiceForm.дата ? new Date(invoiceForm.дата).toLocaleDateString('ru-RU') : '___'}`;
-      await generateFromTemplate(selectedActTemplate, docData, docName, 'Акт', null);
+      await generateFromTemplate(selectedActTemplate, docData, docName, 'Акт', null, desc, итого);
 
       // Обновляем счётчик акта
       await fetch('/api/db', {
