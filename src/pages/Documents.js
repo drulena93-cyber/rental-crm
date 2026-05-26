@@ -398,6 +398,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
         количество_позиций: String(invoiceForm.позиции.length),
       };
       const docName = `Акт №${actNum} от ${invoiceForm.дата ? new Date(invoiceForm.дата).toLocaleDateString('ru-RU') : '___'}`;
+      const desc = invoiceForm.позиции.map(p => p.наименование).filter(Boolean).join(', ');
       await generateFromTemplate(selectedActTemplate, docData, docName, 'Акт', null, desc, итого);
 
       // Обновляем счётчик акта
