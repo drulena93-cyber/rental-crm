@@ -11,12 +11,12 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [tenants, setTenants] = useState([]);
   const [objects, setObjects] = useState([]);
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterShared, setFilterShared] = useState('');
-  const [filterObject, setFilterObject] = useState('');
-  const [sortField, setSortField] = useState('created_at');
-  const [sortDir, setSortDir] = useState('desc');
+  const [filterType, setFilterType] = useState(() => localStorage.getItem('tenants_filterType') || '');
+const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('tenants_filterStatus') || '');
+const [filterShared, setFilterShared] = useState(() => localStorage.getItem('tenants_filterShared') || '');
+const [filterObject, setFilterObject] = useState(() => localStorage.getItem('tenants_filterObject') || '');
+const [sortField, setSortField] = useState(() => localStorage.getItem('tenants_sortField') || 'created_at');
+const [sortDir, setSortDir] = useState(() => localStorage.getItem('tenants_sortDir') || 'desc');
   const [selected, setSelected] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
@@ -46,7 +46,12 @@ export default function Tenants({ onNavigate, highlightId }) {
   useEffect(() => {
     setPage(1);
   }, [search, filterType, filterStatus, filterShared, filterObject]);
-
+useEffect(() => { localStorage.setItem('tenants_filterType', filterType); }, [filterType]);
+useEffect(() => { localStorage.setItem('tenants_filterStatus', filterStatus); }, [filterStatus]);
+useEffect(() => { localStorage.setItem('tenants_filterShared', filterShared); }, [filterShared]);
+useEffect(() => { localStorage.setItem('tenants_filterObject', filterObject); }, [filterObject]);
+useEffect(() => { localStorage.setItem('tenants_sortField', sortField); }, [sortField]);
+useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]);
   async function fetchAll(forceRefresh = false) {
     if (!forceRefresh) {
       const cached = localStorage.getItem(CACHE_KEY);
