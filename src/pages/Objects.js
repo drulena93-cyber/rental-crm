@@ -782,7 +782,7 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
               <div className="form-group"><label>Коммуналка (₽)</label><input type="number" value={form.utility_cost||''} onChange={e => setForm({...form, utility_cost: parseFloat(e.target.value)})} /></div>
               <div className="form-group"><label>Вид коммуналки</label>
                 <select value={form.utility_type||''} onChange={e => setForm({...form, utility_type: e.target.value})}>
-                  <option value="">Не указано</option><option>Фиксированная</option><option>По счётчику</option>
+                <option value="">Не указано</option><option>Фиксированная</option><option>По счётчику</option>
                 </select>
               </div>
             </div>
