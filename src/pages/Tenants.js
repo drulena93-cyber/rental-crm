@@ -277,6 +277,12 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
           <option value="">Совместное: все</option>
           <option value="да">Да</option><option value="нет">Нет</option>
         </select>
+            {(filterType || filterStatus || filterShared || filterObject || search) && (
+  <button onClick={() => { setFilterType(''); setFilterStatus(''); setFilterShared(''); setFilterObject(''); setSearch(''); }}
+    style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+    ✕ Сбросить фильтры
+  </button>
+)}
         <button className="btn-add" onClick={openAdd}>+ Добавить арендатора</button>
         <button onClick={() => fetchAll(true)} disabled={refreshing}
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
