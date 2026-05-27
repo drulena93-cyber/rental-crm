@@ -125,48 +125,29 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
 
   async function quickUpdateStatus(id, status) {
   await supabase.from('tenants').update({ status }).eq('id', id);
+  
   if (status === 'Съехал') {
     const tenant = tenants.find(t => t.id === id);
     if (tenant) {
-      const otRes = await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: `SELECT object_id FROM object_tenants WHERE tenant_id = $1 LIMIT 1`, params: [id] })
-      });
-      const otData = await otRes.json();
-      const objectId = otData.rows?.[0]?.object_id || tenant.object_id; console.log('objectId:', objectId, 'tenant.object_id:', tenant.object_id, 'otData:', otData.rows);
-      if (objectId) {
-        // Добавляем в историю
-        await fetch('/api/db', {
+      try {
+        const res = await fetch('/api/tenant-checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, true)`,
-            params: [objectId, id, tenant.name, tenant.contract_start || tenant.created_at?.split('T')[0] || null, new Date().toISOString().split('T')[0], 'Автоматически при смене статуса на Съехал']
+            tenantId: id,
+            tenantName: tenant.name,
+            contractStart: tenant.contract_start,
+            createdAt: tenant.created_at
           })
         });
-        // Удаляем связь с объектом
-        await fetch('/api/db', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: `DELETE FROM object_tenants WHERE tenant_id = $1`, params: [id] })
-        });
-        // Проверяем остались ли ещё арендаторы на объекте
-        const remainRes = await fetch('/api/db', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: `SELECT COUNT(*) as cnt FROM object_tenants WHERE object_id = $1`, params: [objectId] })
-        });
-        const remainData = await remainRes.json();
-        const cnt = parseInt(remainData.rows?.[0]?.cnt || 0);
-        if (cnt === 0) {
-          await supabase.from('objects').update({ status: 'Не сдано' }).eq('id', objectId);
-        }
+        const data = await res.json();
+        console.log('Checkout result:', data);
+      } catch(e) {
+        console.error('Checkout error:', e);
       }
-      // Обнуляем object_id в карточке арендатора
-      await supabase.from('tenants').update({ object_id: null }).eq('id', id);
     }
   }
+  
   const updated = tenants.map(t => t.id === id ? { ...t, status } : t);
   setTenants(updated);
   try {
