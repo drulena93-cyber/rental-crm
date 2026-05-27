@@ -9,9 +9,12 @@ const CACHE_TTL = 60 * 1000;
 export default function AllDocuments({ onNavigate }) {
   const [documents, setDocuments] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [docTypes, setDocTypes] = useState([]);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterTenant, setFilterTenant] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editingType, setEditingType] = useState(null);
@@ -19,6 +22,7 @@ export default function AllDocuments({ onNavigate }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [sortField, setSortField] = useState('created_at');
   const [sortDir, setSortDir] = useState('desc');
+  const [copyingId, setCopyingId] = useState(null);
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -28,7 +32,7 @@ export default function AllDocuments({ onNavigate }) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterType, filterTenant]);
+  }, [search, filterType, filterTenant, filterDateFrom, filterDateTo]);
 
   async function fetchAll(forceRefresh = false) {
     if (!forceRefresh) {
@@ -36,9 +40,10 @@ export default function AllDocuments({ onNavigate }) {
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
         try {
-          const { docs, tens } = JSON.parse(cached);
+          const { docs, tens, types } = JSON.parse(cached);
           setDocuments(docs || []);
           setTenants(tens || []);
+          setDocTypes(types || []);
           setLastUpdated(new Date(parseInt(cachedTime)));
           setLoading(false);
           return;
@@ -51,12 +56,25 @@ export default function AllDocuments({ onNavigate }) {
     const { data: docs } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
     const { data: tens } = await supabase.from('tenants').select('id, name').is('deleted_at', null).order('name');
 
+    // Загружаем типы из настроек
+    let types = ['Договор', 'Акт', 'Счёт', 'Доверенность', 'Скан паспорта', 'Другое'];
+    try {
+      const dtRes = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT name FROM document_types ORDER BY created_at`, params: [] })
+      });
+      const dtData = await dtRes.json();
+      if (dtData.rows?.length) types = dtData.rows.map(r => r.name);
+    } catch(e) {}
+
     const now = Date.now();
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ docs, tens }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ docs, tens, types }));
     localStorage.setItem(CACHE_TIME_KEY, String(now));
 
     setDocuments(docs || []);
     setTenants(tens || []);
+    setDocTypes(types);
     setLastUpdated(new Date(now));
     setLoading(false);
     setRefreshing(false);
@@ -84,6 +102,24 @@ export default function AllDocuments({ onNavigate }) {
     } catch(e) {}
   }
 
+  async function copyDoc(doc) {
+    if (!window.confirm(`Скопировать "${doc.name}"?`)) return;
+    setCopyingId(doc.id);
+    try {
+      const newName = doc.name + ' (копия)';
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description, amount, items) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          params: [doc.tenant_id, newName, doc.type, doc.file_path || '', doc.file_size, doc.yandex_path || '', doc.description, doc.amount, doc.items ? JSON.stringify(doc.items) : null]
+        })
+      });
+      fetchAll(true);
+    } catch(e) { alert('Ошибка копирования: ' + e.message); }
+    setCopyingId(null);
+  }
+
   function handleSort(field) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
@@ -100,6 +136,8 @@ export default function AllDocuments({ onNavigate }) {
     if (search && !d.name?.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterType && d.type !== filterType) return false;
     if (filterTenant && d.tenant_id !== filterTenant) return false;
+    if (filterDateFrom && new Date(d.created_at) < new Date(filterDateFrom)) return false;
+    if (filterDateTo && new Date(d.created_at) > new Date(filterDateTo + 'T23:59:59')) return false;
     return true;
   }).sort((a, b) => {
     let va = a[sortField], vb = b[sortField];
@@ -122,12 +160,12 @@ export default function AllDocuments({ onNavigate }) {
   }
 
   function typeBadge(doc) {
-    const colors = { 'Договор': 'badge-blue', 'Акт': 'badge-green', 'Доверенность': 'badge-amber', 'Скан паспорта': 'badge-gray', 'Другое': 'badge-gray' };
+    const colors = { 'Договор': 'badge-blue', 'Акт': 'badge-green', 'Доверенность': 'badge-amber', 'Скан паспорта': 'badge-gray', 'Счёт': 'badge-purple', 'Другое': 'badge-gray' };
     if (editingType === doc.id) {
       return (
         <select autoFocus value={doc.type || ''} onChange={e => updateType(doc.id, e.target.value)}
           onBlur={() => setEditingType(null)} style={{fontSize:12, padding:'2px 4px', borderRadius:4}}>
-          <option>Договор</option><option>Акт</option><option>Доверенность</option><option>Скан паспорта</option><option>Другое</option>
+          {docTypes.map(dt => <option key={dt}>{dt}</option>)}
         </select>
       );
     }
@@ -147,19 +185,23 @@ export default function AllDocuments({ onNavigate }) {
         <div className="stat"><div className="stat-label">Всего документов</div><div className="stat-val purple">{documents.length}</div></div>
         <div className="stat"><div className="stat-label">Договоров</div><div className="stat-val blue">{documents.filter(d => d.type === 'Договор').length}</div></div>
         <div className="stat"><div className="stat-label">Актов</div><div className="stat-val green">{documents.filter(d => d.type === 'Акт').length}</div></div>
-        <div className="stat"><div className="stat-label">Счетов</div><div className="stat-val">{documents.filter(d => d.type === 'Счёт').length}</div></div> 
+        <div className="stat"><div className="stat-label">Счетов</div><div className="stat-val">{documents.filter(d => d.type === 'Счёт').length}</div></div>
       </div>
 
       <div className="toolbar">
         <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} />
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">Все типы</option>
-          <option>Договор</option><option>Акт</option><option>Доверенность</option><option>Скан паспорта</option><option>Другое</option>
+          {docTypes.map(dt => <option key={dt}>{dt}</option>)}
         </select>
         <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
           <option value="">Все арендаторы</option>
           {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+        <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+          title="Дата от" style={{padding:'7px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+        <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+          title="Дата до" style={{padding:'7px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
         <button onClick={() => fetchAll(true)} disabled={refreshing}
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
@@ -176,20 +218,20 @@ export default function AllDocuments({ onNavigate }) {
         <>
           <table>
             <thead>
-  <tr>
-    <th style={thStyle} onClick={() => handleSort('name')}>Название документа{sortIcon('name')}</th>
-    <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
-    <th style={thStyle} onClick={() => handleSort('tenant_id')}>Арендатор{sortIcon('tenant_id')}</th>
-    <th>Услуги</th>
-<th style={{textAlign:'right'}}>Сумма</th>
-    <th style={thStyle} onClick={() => handleSort('file_size')}>Размер{sortIcon('file_size')}</th>
-    <th style={thStyle} onClick={() => handleSort('created_at')}>Дата создания{sortIcon('created_at')}</th>
-    <th style={{width:100}}>Действия</th>
-  </tr>
-</thead>
+              <tr>
+                <th style={thStyle} onClick={() => handleSort('name')}>Название документа{sortIcon('name')}</th>
+                <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
+                <th style={thStyle} onClick={() => handleSort('tenant_id')}>Арендатор{sortIcon('tenant_id')}</th>
+                <th>Услуги</th>
+                <th style={{textAlign:'right'}}>Сумма</th>
+                <th style={thStyle} onClick={() => handleSort('file_size')}>Размер{sortIcon('file_size')}</th>
+                <th style={thStyle} onClick={() => handleSort('created_at')}>Дата создания{sortIcon('created_at')}</th>
+                <th style={{width:120}}>Действия</th>
+              </tr>
+            </thead>
             <tbody>
               {paginated.length === 0 && (
-                <tr><td colSpan={6} style={{textAlign:'center', color:'#aaa', padding:30}}>Документы не найдены</td></tr>
+                <tr><td colSpan={8} style={{textAlign:'center', color:'#aaa', padding:30}}>Документы не найдены</td></tr>
               )}
               {paginated.map(doc => (
                 <tr key={doc.id}>
@@ -198,12 +240,12 @@ export default function AllDocuments({ onNavigate }) {
                   <td onClick={() => onNavigate('tenants', doc.tenant_id)} style={{cursor:'pointer', color:'#534AB7', textDecoration:'underline'}}>
                     {getTenantName(doc.tenant_id)}
                   </td>
-                    <td style={{fontSize:12, color:'#555', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={doc.description}>
-  {doc.description || '—'}
-</td>
-  <td style={{fontSize:12, textAlign:'right', whiteSpace:'nowrap'}}>
-  {doc.amount ? doc.amount.toLocaleString('ru-RU', {minimumFractionDigits:2}) + ' ₽' : '—'}
-</td>
+                  <td style={{fontSize:12, color:'#555', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={doc.description}>
+                    {doc.description || '—'}
+                  </td>
+                  <td style={{fontSize:12, textAlign:'right', whiteSpace:'nowrap'}}>
+                    {doc.amount ? doc.amount.toLocaleString('ru-RU', {minimumFractionDigits:2}) + ' ₽' : '—'}
+                  </td>
                   <td>{formatSize(doc.file_size)}</td>
                   <td style={{fontSize:12, color:'#888'}}>{new Date(doc.created_at).toLocaleDateString('ru-RU')}</td>
                   <td>
@@ -213,6 +255,11 @@ export default function AllDocuments({ onNavigate }) {
                         🔗
                       </a>
                     )}
+                    <button onClick={() => copyDoc(doc)} disabled={copyingId === doc.id}
+                      title="Копировать документ"
+                      style={{background:'#f0f0ff', color:'#534AB7', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4}}>
+                      {copyingId === doc.id ? '...' : '📋'}
+                    </button>
                     <button onClick={() => deleteDoc(doc.id)}
                       style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>
                       ✕
