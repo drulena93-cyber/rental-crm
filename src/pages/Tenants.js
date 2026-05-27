@@ -352,7 +352,9 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
                     <td>{typeBadge(t.type)}</td>
                     <td onClick={e => e.stopPropagation()}>
                       {editingStatus === t.id ? (
-                        <select autoFocus value={t.status} onChange={e => quickUpdateStatus(t.id, e.target.value)} onBlur={() => setEditingStatus(null)}>
+  <select autoFocus value={t.status} 
+    onChange={e => { const val = e.target.value; setEditingStatus(null); quickUpdateStatus(t.id, val); }}
+    onBlur={() => setEditingStatus(null)}>
                           <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
                         </select>
                       ) : statusBadge(t)}
