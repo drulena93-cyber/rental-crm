@@ -67,7 +67,7 @@ export default function Contacts({ tenantId, onNavigate }) {
   const filtered = contacts.filter(c => {
     if (selectedTenant && c.tenant_id !== selectedTenant) return false;
     if (search && !c.full_name?.toLowerCase().includes(search.toLowerCase()) &&
-        !c.phone?.toLowerCase().includes(search.toLowerCase())) return false;
+        !c.phone?.toLowerCase().includes(search.toLowerCase()) && !c.email?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -145,7 +145,8 @@ export default function Contacts({ tenantId, onNavigate }) {
                 <th>Телефон</th>
                 <th>Должность</th>
                 <th>Арендатор</th>
-                <th>Описание</th>
+                <th>Email</th>
+<th>Комментарий</th>
                 <th style={{width:80}}>Действия</th>
               </tr>
             </thead>
@@ -158,7 +159,8 @@ export default function Contacts({ tenantId, onNavigate }) {
                   <td onClick={() => onNavigate('tenants', c.tenant_id)} style={{cursor:'pointer', color:'#534AB7', textDecoration:'underline'}}>
                     {getTenantName(c.tenant_id)}
                   </td>
-                  <td>{c.description || '—'}</td>
+                  <td>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : '—'}</td>
+<td>{c.description || '—'}</td>
                   <td onClick={e => e.stopPropagation()}>
                     <button onClick={() => openEdit(c)} style={{background:'none', border:'none', cursor:'pointer', color:'#534AB7', marginRight:8}}>✎</button>
                     <button onClick={() => deleteContact(c.id)} style={{background:'none', border:'none', cursor:'pointer', color:'#A32D2D'}}>✕</button>
@@ -201,9 +203,10 @@ export default function Contacts({ tenantId, onNavigate }) {
             </div>
             <div className="form-group"><label>ФИО *</label><input value={form.full_name || ''} onChange={e => setForm({...form, full_name: e.target.value})} /></div>
             <div className="form-grid">
-              <div className="form-group"><label>Телефон</label><input value={form.phone || ''} onChange={e => setForm({...form, phone: e.target.value})} /></div>
-              <div className="form-group"><label>Должность</label><input value={form.position || ''} onChange={e => setForm({...form, position: e.target.value})} /></div>
-            </div>
+  <div className="form-group"><label>Телефон</label><input value={form.phone || ''} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+  <div className="form-group"><label>Email</label><input type="email" value={form.email || ''} onChange={e => setForm({...form, email: e.target.value})} /></div>
+  <div className="form-group"><label>Должность</label><input value={form.position || ''} onChange={e => setForm({...form, position: e.target.value})} /></div>
+</div>
             <div className="form-group"><label>Арендатор</label>
               <select value={form.tenant_id || ''} onChange={e => setForm({...form, tenant_id: e.target.value})}>
                 <option value="">— Выберите арендатора —</option>
