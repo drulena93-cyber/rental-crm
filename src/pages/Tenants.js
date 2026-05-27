@@ -536,6 +536,9 @@ export default function Tenants({ onNavigate, highlightId }) {
             <div className="form-group"><label>
               <input type="checkbox" checked={form.shared || false} onChange={e => setForm({...form, shared: e.target.checked})} /> Совместное пользование
             </label></div>
+                    <div className="form-group"><label>
+  <input type="checkbox" checked={form.in_invoice || false} onChange={e => setForm({...form, in_invoice: e.target.checked})} /> В счёт
+</label></div>
 
             <div className="form-actions">
               <button className="btn-cancel" onClick={() => setShowForm(false)}>Отмена</button>
