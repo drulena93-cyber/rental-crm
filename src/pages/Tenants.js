@@ -134,7 +134,7 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
         body: JSON.stringify({ query: `SELECT object_id FROM object_tenants WHERE tenant_id = $1 LIMIT 1`, params: [id] })
       });
       const otData = await otRes.json();
-      const objectId = otData.rows?.[0]?.object_id || tenant.object_id;
+      const objectId = otData.rows?.[0]?.object_id || tenant.object_id; console.log('objectId:', objectId, 'tenant.object_id:', tenant.object_id, 'otData:', otData.rows);
       if (objectId) {
         // Добавляем в историю
         await fetch('/api/db', {
