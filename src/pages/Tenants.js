@@ -12,7 +12,7 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [objects, setObjects] = useState([]);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState(() => localStorage.getItem('tenants_filterType') || '');
-const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('tenants_filterStatus') || '');
+const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('tenants_filterStatus') || 'Активный');
 const [filterShared, setFilterShared] = useState(() => localStorage.getItem('tenants_filterShared') || '');
 const [filterObject, setFilterObject] = useState(() => localStorage.getItem('tenants_filterObject') || '');
 const [sortField, setSortField] = useState(() => localStorage.getItem('tenants_sortField') || 'created_at');
@@ -145,6 +145,14 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
             })
           });
         }
+        await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: `DELETE FROM object_tenants WHERE tenant_id = $1`,
+    params: [id]
+  })
+});
       }
     }
     const updated = tenants.map(t => t.id === id ? { ...t, status } : t);
