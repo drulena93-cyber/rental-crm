@@ -124,45 +124,57 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
   });
 
   async function quickUpdateStatus(id, status) {
-    await supabase.from('tenants').update({ status }).eq('id', id);
-    if (status === 'Съехал') {
-      const tenant = tenants.find(t => t.id === id);
-      if (tenant) {
-        const otRes = await fetch('/api/db', {
+  await supabase.from('tenants').update({ status }).eq('id', id);
+  if (status === 'Съехал') {
+    const tenant = tenants.find(t => t.id === id);
+    if (tenant) {
+      const otRes = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT object_id FROM object_tenants WHERE tenant_id = $1 LIMIT 1`, params: [id] })
+      });
+      const otData = await otRes.json();
+      const objectId = otData.rows?.[0]?.object_id || tenant.object_id;
+      if (objectId) {
+        // Добавляем в историю
+        await fetch('/api/db', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: `SELECT object_id FROM object_tenants WHERE tenant_id = $1 LIMIT 1`, params: [id] })
+          body: JSON.stringify({
+            query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, true)`,
+            params: [objectId, id, tenant.name, tenant.contract_start || tenant.created_at?.split('T')[0] || null, new Date().toISOString().split('T')[0], 'Автоматически при смене статуса на Съехал']
+          })
         });
-        const otData = await otRes.json();
-        const objectId = otData.rows?.[0]?.object_id || tenant.object_id;
-        if (objectId) {
-          await fetch('/api/db', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, true)`,
-              params: [objectId, id, tenant.name, tenant.contract_start || null, new Date().toISOString().split('T')[0], 'Автоматически при смене статуса на Съехал']
-            })
-          });
-        }
+        // Удаляем связь с объектом
         await fetch('/api/db', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    query: `DELETE FROM object_tenants WHERE tenant_id = $1`,
-    params: [id]
-  })
-});
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: `DELETE FROM object_tenants WHERE tenant_id = $1`, params: [id] })
+        });
+        // Проверяем остались ли ещё арендаторы на объекте
+        const remainRes = await fetch('/api/db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: `SELECT COUNT(*) as cnt FROM object_tenants WHERE object_id = $1`, params: [objectId] })
+        });
+        const remainData = await remainRes.json();
+        const cnt = parseInt(remainData.rows?.[0]?.cnt || 0);
+        if (cnt === 0) {
+          await supabase.from('objects').update({ status: 'Не сдано' }).eq('id', objectId);
+        }
       }
+      // Обнуляем object_id в карточке арендатора
+      await supabase.from('tenants').update({ object_id: null }).eq('id', id);
     }
-    const updated = tenants.map(t => t.id === id ? { ...t, status } : t);
-    setTenants(updated);
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) { const d = JSON.parse(cached); d.tens = updated; localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }
-    } catch(e) {}
-    setEditingStatus(null);
   }
+  const updated = tenants.map(t => t.id === id ? { ...t, status } : t);
+  setTenants(updated);
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) { const d = JSON.parse(cached); d.tens = updated; localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }
+  } catch(e) {}
+  setEditingStatus(null);
+}
 
   async function findByInn(inn) {
     if (!inn || inn.length < 10) return alert('Введите ИНН (10 или 12 цифр)');
