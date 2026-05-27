@@ -296,6 +296,7 @@ export default function Tenants({ onNavigate, highlightId }) {
                 <th style={thStyle} onClick={() => handleSort('activity')}>Вид деятельности{sortIcon('activity')}</th>
                 <th style={thStyle} onClick={() => handleSort('object_id')}>Объект{sortIcon('object_id')}</th>
                 <th style={thStyle} onClick={() => handleSort('contract_end')}>Окончание договора{sortIcon('contract_end')}</th>
+        <th>В счёт</th>
                 <th>Контакты</th>
               </tr>
             </thead>
@@ -324,6 +325,13 @@ export default function Tenants({ onNavigate, highlightId }) {
                         {days <= 30 && ` (${days} дн.)`}
                       </span>
                     ) : '—'}</td>
+                      <td onClick={e => e.stopPropagation()}>
+  <input type="checkbox" checked={t.in_invoice || false}
+    onChange={async e => {
+      await supabase.from('tenants').update({ in_invoice: e.target.checked }).eq('id', t.id);
+      setTenants(tenants.map(ten => ten.id === t.id ? { ...ten, in_invoice: e.target.checked } : ten));
+    }} />
+</td>
                     <td onClick={e => { e.stopPropagation(); onNavigate('contacts', t.id); }}>
                       <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>Контакты →</span>
                     </td>
@@ -392,6 +400,7 @@ export default function Tenants({ onNavigate, highlightId }) {
             <div className="detail-row"><div className="detail-key">Начало договора</div><div className="detail-val">{selected.contract_start ? new Date(selected.contract_start).toLocaleDateString('ru-RU') : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Окончание договора</div><div className="detail-val">{selected.contract_end ? new Date(selected.contract_end).toLocaleDateString('ru-RU') : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
+              <div className="detail-row"><div className="detail-key">В счёт</div><div className="detail-val">{selected.in_invoice ? '✅ Да' : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments || '—'}</div></div>
             <div className="linked-section">
               <div className="linked-title">Контакты</div>
