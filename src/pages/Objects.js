@@ -153,11 +153,11 @@ export default function Objects({ onNavigate, highlightId }) {
   const [tenants, setTenants] = useState([]);
   const [objectTenants, setObjectTenants] = useState([]);
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterFloor, setFilterFloor] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [filterShared, setFilterShared] = useState('');
-  const [filterTenant, setFilterTenant] = useState('');
+  const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('objects_filterStatus') || '');
+const [filterFloor, setFilterFloor] = useState(() => localStorage.getItem('objects_filterFloor') || '');
+const [filterType, setFilterType] = useState(() => localStorage.getItem('objects_filterType') || '');
+const [filterShared, setFilterShared] = useState(() => localStorage.getItem('objects_filterShared') || '');
+const [filterTenant, setFilterTenant] = useState(() => localStorage.getItem('objects_filterTenant') || '');
   const [selected, setSelected] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
@@ -169,8 +169,8 @@ export default function Objects({ onNavigate, highlightId }) {
   const [note, setNote] = useState('');
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState('');
-  const [sortField, setSortField] = useState('name');
-  const [sortDir, setSortDir] = useState('asc');
+  const [sortField, setSortField] = useState(() => localStorage.getItem('objects_sortField') || 'name');
+const [sortDir, setSortDir] = useState(() => localStorage.getItem('objects_sortDir') || 'asc');
   const [showTenantsModal, setShowTenantsModal] = useState(false);
   const [selectedObjectForTenants, setSelectedObjectForTenants] = useState(null);
   const [objectTenantsList, setObjectTenantsList] = useState([]);
@@ -198,9 +198,17 @@ export default function Objects({ onNavigate, highlightId }) {
   }, [page]);
 
   // Сбрасываем страницу при изменении фильтров
-  useEffect(() => {
-    setPage(1);
-  }, [search, filterStatus, filterFloor, filterType, filterShared, filterTenant]);
+useEffect(() => {
+  setPage(1);
+}, [search, filterStatus, filterFloor, filterType, filterShared, filterTenant]);
+
+useEffect(() => { localStorage.setItem('objects_filterStatus', filterStatus); }, [filterStatus]);
+useEffect(() => { localStorage.setItem('objects_filterFloor', filterFloor); }, [filterFloor]);
+useEffect(() => { localStorage.setItem('objects_filterType', filterType); }, [filterType]);
+useEffect(() => { localStorage.setItem('objects_filterShared', filterShared); }, [filterShared]);
+useEffect(() => { localStorage.setItem('objects_filterTenant', filterTenant); }, [filterTenant]);
+useEffect(() => { localStorage.setItem('objects_sortField', sortField); }, [sortField]);
+useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]);
 
   async function fetchAll(forceRefresh = false) {
     // Проверяем кэш
@@ -437,6 +445,12 @@ export default function Objects({ onNavigate, highlightId }) {
           <option value="">Совместное: все</option>
           <option value="да">Да</option><option value="нет">Нет</option>
         </select>
+            {(filterStatus || filterFloor || filterType || filterShared || filterTenant || search) && (
+  <button onClick={() => { setFilterStatus(''); setFilterFloor(''); setFilterType(''); setFilterShared(''); setFilterTenant(''); setSearch(''); }}
+    style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+    ✕ Сбросить фильтры
+  </button>
+)}
         <button className="btn-add" onClick={openAdd}>+ Добавить объект</button>
         <button onClick={() => fetchAll(true)} disabled={refreshing}
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
