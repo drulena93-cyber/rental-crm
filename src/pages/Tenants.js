@@ -204,20 +204,28 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
   async function saveForm() {
   if (!form.name) return alert('Введите имя арендатора');
   if (form.id) {
-  // Если объект изменился — удаляем старую привязку
-  const oldTenant = tenants.find(t => t.id === form.id);
-  if (oldTenant?.object_id && oldTenant.object_id !== form.object_id) {
-    await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `DELETE FROM object_tenants WHERE tenant_id = $1 AND object_id = $2`,
-        params: [form.id, oldTenant.object_id]
-      })
-    });
-  }
-  await supabase.from('tenants').update(form).eq('id', form.id);
-  // ... остальной код
+    const oldTenant = tenants.find(t => t.id === form.id);
+    if (oldTenant?.object_id && oldTenant.object_id !== form.object_id) {
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `DELETE FROM object_tenants WHERE tenant_id = $1 AND object_id = $2`,
+          params: [form.id, oldTenant.object_id]
+        })
+      });
+    }
+    await supabase.from('tenants').update(form).eq('id', form.id);
+    if (form.object_id) {
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1, $2, true) ON CONFLICT DO NOTHING`,
+          params: [form.object_id, form.id]
+        })
+      });
+      await supabase.from('objects').update({ status: 'Сдано' }).eq('id', form.object_id);
     }
   } else {
     const { data: newTenant } = await supabase.from('tenants').insert(form).select().single();
