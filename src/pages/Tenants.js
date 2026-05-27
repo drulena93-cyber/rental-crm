@@ -228,7 +228,7 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
       await supabase.from('objects').update({ status: 'Сдано' }).eq('id', form.object_id);
     }
   } else {
-    const insertRes = await supabase.from('tenants').insert(form); const { data: newTenants } = await supabase.from('tenants').select('id').eq('name', form.name).order('created_at', {ascending: false}).limit(1); const newTenant = newTenants?.[0];
+    const insertRes = await supabase.from('tenants').insert(form); const { data: newTenants } = await supabase.from('tenants').select('id').eq('name', form.name); const newTenant = newTenants?.[newTenants.length - 1];
     if (newTenant && form.object_id) {
       await fetch('/api/db', {
         method: 'POST',
