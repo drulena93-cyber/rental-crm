@@ -202,7 +202,13 @@ export default function AllDocuments({ onNavigate }) {
           title="Дата от" style={{padding:'7px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
         <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
           title="Дата до" style={{padding:'7px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
-        <button onClick={() => fetchAll(true)} disabled={refreshing}
+        {(search || filterType || filterTenant || filterDateFrom || filterDateTo) && (
+  <button onClick={() => { setSearch(''); setFilterType(''); setFilterTenant(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+    style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+    ✕ Сбросить фильтры
+  </button>
+)}
+            <button onClick={() => fetchAll(true)} disabled={refreshing}
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
