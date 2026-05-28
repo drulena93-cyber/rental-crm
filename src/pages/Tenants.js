@@ -479,13 +479,18 @@ export default function Tenants({ onNavigate, highlightId }) {
               <button className="modal-close" onClick={() => setSelected(null)}>✕ Закрыть</button>
             </div>
             {getObject(selected.object_id) && (
-              <div className="detail-row"><div className="detail-key">Объект</div>
-                <div className="detail-val" style={{color:'#534AB7', cursor:'pointer'}}
-                  onClick={() => { setSelected(null); onNavigate('objects', getObject(selected.object_id).id); }}>
-                  → {getObject(selected.object_id).name}
-                </div>
-              </div>
-            )}
+  <div className="detail-row"><div className="detail-key">Объект</div>
+    <div className="detail-val" style={{color:'#534AB7', cursor:'pointer'}}
+      onClick={() => { setSelected(null); onNavigate('objects', getObject(selected.object_id).id); }}>
+      → {getObject(selected.object_id).name}
+    </div>
+  </div>
+)}
+{tenantTotalRent > 0 && (
+  <div className="detail-row"><div className="detail-key">💰 Итого</div>
+    <div className="detail-val" style={{fontWeight:500, color:'#3B6D11'}}>{tenantTotalRent.toLocaleString('ru-RU')} ₽/мес</div>
+  </div>
+)}
             <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{typeBadge(selected.type)}</div></div>
             <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{selected.status}</div></div>
             <div className="detail-row"><div className="detail-key">Вид деятельности</div><div className="detail-val">{selected.activity || '—'}</div></div>
@@ -516,12 +521,6 @@ export default function Tenants({ onNavigate, highlightId }) {
             <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
             <div className="detail-row"><div className="detail-key">В счёт</div><div className="detail-val">{selected.in_invoice ? '✅ Да' : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments || '—'}</div></div>
-
-            {tenantTotalRent > 0 && (
-              <div className="detail-row"><div className="detail-key">💰 Итого аренда+коммуналка</div>
-                <div className="detail-val" style={{fontWeight:500, color:'#3B6D11'}}>{tenantTotalRent.toLocaleString('ru-RU')} ₽/мес</div>
-              </div>
-            )}
 
             {tenantHistory.length > 0 && (
               <div className="linked-section">
