@@ -125,29 +125,6 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
 
   async function quickUpdateStatus(id, status) {
   await supabase.from('tenants').update({ status }).eq('id', id);
-  
-  if (status === 'Съехал') {
-    const tenant = tenants.find(t => t.id === id);
-    if (tenant) {
-      try {
-        const res = await fetch('/api/tenant-checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenantId: id,
-            tenantName: tenant.name,
-            contractStart: tenant.contract_start,
-            createdAt: tenant.created_at
-          })
-        });
-        const data = await res.json();
-        console.log('Checkout result:', data);
-      } catch(e) {
-        console.error('Checkout error:', e);
-      }
-    }
-  }
-  
   const updated = tenants.map(t => t.id === id ? { ...t, status } : t);
   setTenants(updated);
   try {
