@@ -182,6 +182,8 @@ const [sortDir, setSortDir] = useState(() => localStorage.getItem('objects_sortD
     return saved ? parseInt(saved) : 1;
   });
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [showCheckout, setShowCheckout] = useState(false);
+const [checkoutData, setCheckoutData] = useState({ tenantId: '', tenantName: '', objectId: '', date: '', comment: '' });
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -380,12 +382,47 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
     fetchAll(true);
   }
 
-  async function deleteObj(id) {
-    if (!window.confirm('Переместить объект в корзину?')) return;
-    await supabase.from('objects').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-    setSelected(null);
+  async function confirmCheckout() {
+  try {
+    await supabase.from('tenants').update({ status: 'Съехал' }).eq('id', checkoutData.tenantId);
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, false)`,
+        params: [checkoutData.objectId, checkoutData.tenantId, checkoutData.tenantName, null, checkoutData.date, checkoutData.comment || 'Съехал']
+      })
+    });
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `DELETE FROM object_tenants WHERE tenant_id = $1`,
+        params: [checkoutData.tenantId]
+      })
+    });
+    await supabase.from('tenants').update({ object_id: null }).eq('id', checkoutData.tenantId);
+    const remainRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT COUNT(*) as cnt FROM object_tenants WHERE object_id = $1`,
+        params: [checkoutData.objectId]
+      })
+    });
+    const remainData = await remainRes.json();
+    const cnt = parseInt(remainData.rows?.[0]?.cnt || 0);
+    if (cnt === 0) {
+      await supabase.from('objects').update({ status: 'Не сдано' }).eq('id', checkoutData.objectId);
+    }
+    setShowCheckout(false);
+    setCheckoutData({ tenantId: '', tenantName: '', objectId: '', date: '', comment: '' });
     fetchAll(true);
+    setSelected(null);
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
   }
+}
 
   function statusBadge(o) {
     const s = o.status;
@@ -733,13 +770,18 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
               {getObjectTenants(selected.id).length === 0
                 ? <div style={{color:'#aaa', fontSize:13}}>Не привязаны</div>
                 : getObjectTenants(selected.id).map(ot => (
-                  <div key={ot.id} className="linked-item" style={{cursor:'pointer', color:'#534AB7', display:'flex', alignItems:'center', gap:6}}
-                    onClick={() => { setSelected(null); onNavigate('tenants', ot.tenant_id); }}>
-                    {ot.is_primary && <span style={{color:'#f59e0b'}}>★</span>}
-                    → {ot.tenant_name}
-                  </div>
-                ))
-              }
+  <div key={ot.id} className="linked-item" style={{display:'flex', alignItems:'center', gap:6, justifyContent:'space-between'}}>
+    <span style={{cursor:'pointer', color:'#534AB7'}}
+      onClick={() => { setSelected(null); onNavigate('tenants', ot.tenant_id); }}>
+      {ot.is_primary && <span style={{color:'#f59e0b'}}>★</span>}
+      → {ot.tenant_name}
+    </span>
+    <button onClick={e => { e.stopPropagation(); setCheckoutData({ tenantId: ot.tenant_id, tenantName: ot.tenant_name, objectId: selected.id, date: new Date().toISOString().split('T')[0], comment: '' }); setShowCheckout(true); }}
+      style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'3px 8px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap'}}>
+      🚪 Съехал
+    </button>
+  </div>
+))
               <div style={{marginTop:8}}>
                 <button style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'6px 12px', fontSize:12, cursor:'pointer'}}
                   onClick={() => { setSelected(null); openTenantsModal(selected); }}>
@@ -800,6 +842,39 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
           </div>
         </div>
       )}
+        {showCheckout && (
+  <div className="modal-overlay" onClick={() => setShowCheckout(false)}>
+    <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:400}}>
+      <div className="modal-title">
+        🚪 Арендатор съехал
+        <button className="modal-close" onClick={() => setShowCheckout(false)}>✕</button>
+      </div>
+      <p style={{fontSize:13, color:'#555', marginBottom:16}}>
+        Подтвердите что <strong>{checkoutData.tenantName}</strong> съехал. Это добавит запись в историю объекта и уберёт привязку.
+      </p>
+      <div className="form-group"><label>Дата выезда</label>
+        <input type="date" value={checkoutData.date}
+          onChange={e => setCheckoutData({...checkoutData, date: e.target.value})} />
+      </div>
+      <div className="form-group"><label>Комментарий</label>
+        <input value={checkoutData.comment}
+          onChange={e => setCheckoutData({...checkoutData, comment: e.target.value})}
+          placeholder="Необязательно..." />
+      </div>
+      <div className="form-actions">
+        <button className="btn-cancel" onClick={() => setShowCheckout(false)}>Отмена</button>
+        <button style={{background:'#A32D2D', color:'#fff', border:'none', borderRadius:6, padding:'8px 14px', fontSize:13, cursor:'pointer'}}
+          onClick={confirmCheckout}>
+          ✓ Подтвердить выезд
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+    </div>
+  );
+}
     </div>
   );
 }
