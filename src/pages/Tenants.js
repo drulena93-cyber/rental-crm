@@ -99,7 +99,10 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
     if (filterType && t.type !== filterType) return false;
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterShared && (filterShared === 'да' ? !t.shared : t.shared)) return false;
-    if (filterObject && t.object_id !== filterObject) return false;
+    if (filterObject) {
+  const tenantObj = objects.find(o => o.id === t.object_id);
+  if (!tenantObj || tenantObj.type !== filterObject) return false;
+}
     return true;
   }).sort((a, b) => {
     let va = a[sortField], vb = b[sortField];
@@ -279,9 +282,11 @@ fetchAll(true);
           <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
         </select>
         <select value={filterObject} onChange={e => setFilterObject(e.target.value)}>
-          <option value="">Все объекты</option>
-          {objects.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
+  <option value="">Все объекты</option>
+  {[...new Set(objects.map(o => o.type).filter(Boolean))].map(type => (
+    <option key={type} value={type}>{type}</option>
+  ))}
+</select>
         <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
           <option value="">Совместное: все</option>
           <option value="да">Да</option><option value="нет">Нет</option>
@@ -317,7 +322,9 @@ fetchAll(true);
                 <th style={thStyle} onClick={() => handleSort('object_id')}>Объект{sortIcon('object_id')}</th>
                 <th style={thStyle} onClick={() => handleSort('contract_end')}>Окончание договора{sortIcon('contract_end')}</th>
         <th>В счёт</th>
-                <th>Контакты</th>
+<th style={thStyle} onClick={() => handleSort('updated_at')}>Изменён{sortIcon('updated_at')}</th>
+<th>Контакты</th>
+        <th style={{width:40}}></th>
               </tr>
             </thead>
             <tbody>
@@ -354,9 +361,14 @@ fetchAll(true);
       setTenants(tenants.map(ten => ten.id === t.id ? { ...ten, in_invoice: e.target.checked } : ten));
     }} />
 </td>
-                    <td onClick={e => { e.stopPropagation(); onNavigate('contacts', t.id); }}>
-                      <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>Контакты →</span>
-                    </td>
+<td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{t.updated_at ? new Date(t.updated_at).toLocaleDateString('ru-RU') : '—'}</td>
+<td onClick={e => { e.stopPropagation(); onNavigate('contacts', t.id); }}>
+  <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>Контакты →</span>
+</td>
+<td onClick={e => e.stopPropagation()}>
+  <button onClick={() => deleteTenant(t.id)}
+    style={{background:'none', border:'none', cursor:'pointer', color:'#A32D2D', fontSize:16}}>✕</button>
+</td>
                   </tr>
                 );
               })}
