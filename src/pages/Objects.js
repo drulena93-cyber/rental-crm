@@ -779,7 +779,7 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
       {ot.is_primary && <span style={{color:'#f59e0b'}}>★</span>}
       → {ot.tenant_name}
     </span>
-    <button onClick={e => { e.stopPropagation(); const tenantData = tenants ? tenants.find(t => t.id === ot.tenant_id) : null; setCheckoutData({ tenantId: ot.tenant_id, tenantName: ot.tenant_name, objectId: selected.id, date: new Date().toISOString().split('T')[0], comment: '', contractStart: tenantData?.contract_start || null, createdAt: tenantData?.created_at || null }); setShowCheckout(true); }}
+    <button onClick={e => { e.stopPropagation(); const tenantData = tenants ? tenants.find(t => t.id === ot.tenant_id) : null; setCheckoutData({ tenantId: ot.tenant_id, tenantName: ot.tenant_name, objectId: selected.id, date: new Date().toISOString().split('T')[0], comment: '', contractStart: tenantData?.contract_start || tenantData?.created_at?.split('T')[0] || null, createdAt: tenantData?.created_at || null }); setShowCheckout(true); }}
       style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'3px 8px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap'}}>
       🚪 Съехал
     </button>
