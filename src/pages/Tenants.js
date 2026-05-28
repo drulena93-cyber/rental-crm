@@ -46,7 +46,7 @@ export default function Tenants({ onNavigate, highlightId }) {
   useEffect(() => {
     if (selected) {
       fetchTenantDetails(selected.id);
-      setCheckoutTenantData({ date: new Date().toISOString().split('T')[0], comment: '' });
+      setCheckoutTenantData({ date: new Date().toISOString().split('T')[0], comment: '', dateFrom: selected.contract_start || selected.created_at?.split('T')[0] || '' });
     }
   }, [selected]);
 
