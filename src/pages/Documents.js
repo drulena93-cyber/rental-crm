@@ -572,10 +572,9 @@ try {
   <div className="form-group"><label>Дата счёта</label>
     <input type="date" value={invoiceForm.дата} onChange={e => setInvoiceForm({...invoiceForm, дата: e.target.value})} />
   </div>
-  <div className="form-group"><label>Дата акта</label>
-    <input type="date" value={invoiceForm.дата_акта} onChange={e => setInvoiceForm({...invoiceForm, дата_акта: e.target.value})}
-      placeholder="Если отличается от даты счёта" />
-  </div>
+</div>
+<div className="form-group"><label>Дата акта <span style={{fontSize:11, color:'#aaa'}}>(если отличается от даты счёта)</span></label>
+  <input type="date" value={invoiceForm.дата_акта || ''} onChange={e => setInvoiceForm({...invoiceForm, дата_акта: e.target.value})} />
 </div>
             </div>
 
