@@ -872,10 +872,6 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
     </div>
   </div>
 )}
-
-    </div>
-  );
-}
     </div>
   );
 }
