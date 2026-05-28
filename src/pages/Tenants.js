@@ -127,7 +127,7 @@ export default function Tenants({ onNavigate, highlightId }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, false)`,
-            params: [row.object_id, selected.id, selected.name, selected.contract_start || null, checkoutTenantData.date, checkoutTenantData.comment || 'Съехал']
+            params: [row.object_id, selected.id, selected.name, selected.contract_start || selected.created_at?.split('T')[0] || null, checkoutTenantData.date, checkoutTenantData.comment || 'Съехал']
           })
         });
         await fetch('/api/db', {
