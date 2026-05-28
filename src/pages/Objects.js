@@ -856,10 +856,14 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
       <p style={{fontSize:13, color:'#555', marginBottom:16}}>
         Подтвердите что <strong>{checkoutData.tenantName}</strong> съехал. Это добавит запись в историю объекта и уберёт привязку.
       </p>
-      <div className="form-group"><label>Дата выезда</label>
-        <input type="date" value={checkoutData.date}
-          onChange={e => setCheckoutData({...checkoutData, date: e.target.value})} />
-      </div>
+      <div className="form-group"><label>Дата заезда</label>
+  <input type="date" value={checkoutData.contractStart || ''}
+    onChange={e => setCheckoutData({...checkoutData, contractStart: e.target.value})} />
+</div>
+<div className="form-group"><label>Дата выезда</label>
+  <input type="date" value={checkoutData.date}
+    onChange={e => setCheckoutData({...checkoutData, date: e.target.value})} />
+</div>
       <div className="form-group"><label>Комментарий</label>
         <input value={checkoutData.comment}
           onChange={e => setCheckoutData({...checkoutData, comment: e.target.value})}
