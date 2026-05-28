@@ -137,7 +137,7 @@ function HistorySection({ objectId, tenants, onNavigate }) {
                 </td>
                 <td>{h.date_from ? new Date(h.date_from).toLocaleDateString('ru-RU') : '—'}</td>
                 <td>{h.date_to ? new Date(h.date_to).toLocaleDateString('ru-RU') : '—'}</td>
-                <td style={{maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={h.comment}>{h.comment || '—'}</td>
+                <td style={{maxWidth:200, wordBreak:'break-word'}} title={h.comment}>{h.comment || '—'}</td>
                 <td><button onClick={() => deleteHistory(h.id)} style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:12}}>✕</button></td>
               </tr>
             ))}
@@ -401,7 +401,10 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
         params: [checkoutData.tenantId]
       })
     });
-    await supabase.from('tenants').update({ object_id: null }).eq('id', checkoutData.tenantId);
+    await supabase.from('tenants').update({ 
+  object_id: null,
+  comments: checkoutData.comment ? `Съехал ${checkoutData.date}: ${checkoutData.comment}` : `Съехал ${checkoutData.date}`
+}).eq('id', checkoutData.tenantId);
     const remainRes = await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
