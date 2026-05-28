@@ -56,7 +56,7 @@ export default function Documents({ tenantId, tenantName, onClose }) {
   const [selectedInvoiceTemplate, setSelectedInvoiceTemplate] = useState('');
   const [selectedActTemplate, setSelectedActTemplate] = useState('');
   const [tenant, setTenant] = useState(null);
-  const [invoiceForm, setInvoiceForm] = useState({ номер: '', дата: '', позиции: [emptyItem()] });
+  const [invoiceForm, setInvoiceForm] = useState({ номер: '', дата: '', дата_акта: '', позиции: [emptyItem()] });
   const fileRef = useRef();
 
   useEffect(() => { fetchAll(); }, [tenantId]);
@@ -397,7 +397,7 @@ try {
 
       const docData = {
         номер_акта: String(actNum),
-        дата_акта: formatDateRu(invoiceForm.дата),
+        дата_акта: formatDateRu(invoiceForm.дата_акта || invoiceForm.дата),
         арендодатель_название: org?.full_name || org?.name || '',
         арендатор_название: tenant?.name || '',
         позиции: invoiceForm.позиции.map((p, i) => ({
@@ -566,12 +566,17 @@ try {
             </div>
 
             <div className="form-grid">
-              <div className="form-group"><label>Номер счёта</label>
-                <input value={invoiceForm.номер} onChange={e => setInvoiceForm({...invoiceForm, номер: e.target.value})} />
-              </div>
-              <div className="form-group"><label>Дата</label>
-                <input type="date" value={invoiceForm.дата} onChange={e => setInvoiceForm({...invoiceForm, дата: e.target.value})} />
-              </div>
+  <div className="form-group"><label>Номер счёта</label>
+    <input value={invoiceForm.номер} onChange={e => setInvoiceForm({...invoiceForm, номер: e.target.value})} />
+  </div>
+  <div className="form-group"><label>Дата счёта</label>
+    <input type="date" value={invoiceForm.дата} onChange={e => setInvoiceForm({...invoiceForm, дата: e.target.value})} />
+  </div>
+  <div className="form-group"><label>Дата акта</label>
+    <input type="date" value={invoiceForm.дата_акта} onChange={e => setInvoiceForm({...invoiceForm, дата_акта: e.target.value})}
+      placeholder="Если отличается от даты счёта" />
+  </div>
+</div>
             </div>
 
             {/* Позиции */}
