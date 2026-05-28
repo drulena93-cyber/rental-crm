@@ -173,10 +173,10 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
   }
 
   function openEdit(t) {
-    setForm({ ...t });
-    setShowForm(true);
-    setSelected(null);
-  }
+  setForm({ ...t });
+  setSelected(null);
+  setShowForm(true);
+}
 
   async function saveForm() {
   if (!form.name) return alert('Введите имя арендатора');
@@ -219,7 +219,8 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
     }
   }
   setShowForm(false);
-  fetchAll(true);
+setSelected(null);
+fetchAll(true);
 }
 
   async function deleteTenant(id) {
@@ -416,6 +417,14 @@ useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]
               <div className="detail-row"><div className="detail-key">КПП</div><div className="detail-val">{selected.kpp || '—'}</div></div>
             </>}
             <div className="detail-row"><div className="detail-key">ИНН</div><div className="detail-val">{selected.inn || '—'}</div></div>
+              {(selected.type === 'ЮРИД.ЛИЦО' || selected.type === 'ИП') && selected.inn && (
+  <div className="detail-row"><div className="detail-key">РусПрофиль</div>
+    <div className="detail-val">
+      <a href={`https://rusprofile.ru/search?query=${selected.inn}`} target="_blank" rel="noreferrer"
+        style={{color:'#534AB7'}}>🔍 Открыть на РусПрофиль</a>
+    </div>
+  </div>
+)}
             <div className="detail-row"><div className="detail-key">ОГРН</div><div className="detail-val">{selected.ogrn || '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Банк / Р/С / К/С</div><div className="detail-val" style={{fontSize:12, whiteSpace:'pre-wrap'}}>{selected.bank || '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Начало договора</div><div className="detail-val">{selected.contract_start ? new Date(selected.contract_start).toLocaleDateString('ru-RU') : '—'}</div></div>
