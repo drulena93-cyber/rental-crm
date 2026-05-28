@@ -390,7 +390,7 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, false)`,
-        params: [checkoutData.objectId, checkoutData.tenantId, checkoutData.tenantName, null, checkoutData.date, checkoutData.comment || 'Съехал']
+        params: [checkoutData.objectId, checkoutData.tenantId, checkoutData.tenantName, checkoutData.contractStart || checkoutData.createdAt?.split('T')[0] || null, checkoutData.date, checkoutData.comment || 'Съехал']
       })
     });
     await fetch('/api/db', {
@@ -779,7 +779,7 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
       {ot.is_primary && <span style={{color:'#f59e0b'}}>★</span>}
       → {ot.tenant_name}
     </span>
-    <button onClick={e => { e.stopPropagation(); setCheckoutData({ tenantId: ot.tenant_id, tenantName: ot.tenant_name, objectId: selected.id, date: new Date().toISOString().split('T')[0], comment: '' }); setShowCheckout(true); }}
+    <button onClick={e => { e.stopPropagation(); const tenantData = tenants ? tenants.find(t => t.id === ot.tenant_id) : null; setCheckoutData({ tenantId: ot.tenant_id, tenantName: ot.tenant_name, objectId: selected.id, date: new Date().toISOString().split('T')[0], comment: '', contractStart: tenantData?.contract_start || null, createdAt: tenantData?.created_at || null }); setShowCheckout(true); }}
       style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'3px 8px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap'}}>
       🚪 Съехал
     </button>
