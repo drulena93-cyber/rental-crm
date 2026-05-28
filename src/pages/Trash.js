@@ -48,15 +48,41 @@ export default function Trash() {
         <div className="stat"><div className="stat-label">Контактов</div><div className="stat-val">{contacts.length}</div></div>
       </div>
 
-      <div style={{display:'flex', gap:4, marginBottom:14}}>
-        {['objects','tenants','contacts'].map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{padding:'6px 14px', borderRadius:6, border:'1px solid #ddd', cursor:'pointer', fontSize:13,
-              background: tab===t ? '#534AB7' : '#fff', color: tab===t ? '#fff' : '#666'}}>
-            {t==='objects' ? `Объекты (${objects.length})` : t==='tenants' ? `Арендаторы (${tenants.length})` : `Контакты (${contacts.length})`}
-          </button>
-        ))}
-      </div>
+     <div style={{display:'flex', gap:4, marginBottom:14, justifyContent:'space-between', alignItems:'center'}}>
+  <div style={{display:'flex', gap:4}}>
+    {['objects','tenants','contacts'].map(t => (
+      <button key={t} onClick={() => setTab(t)}
+        style={{padding:'6px 14px', borderRadius:6, border:'1px solid #ddd', cursor:'pointer', fontSize:13,
+          background: tab===t ? '#534AB7' : '#fff', color: tab===t ? '#fff' : '#666'}}>
+        {t==='objects' ? `Объекты (${objects.length})` : t==='tenants' ? `Арендаторы (${tenants.length})` : `Контакты (${contacts.length})`}
+      </button>
+    ))}
+  </div>
+  <div style={{display:'flex', gap:8}}>
+    <button onClick={async () => {
+      if (!window.confirm(`Очистить вкладку "${tab === 'objects' ? 'Объекты' : tab === 'tenants' ? 'Арендаторы' : 'Контакты'}" полностью?`)) return;
+      const table = tab === 'objects' ? 'objects' : tab === 'tenants' ? 'tenants' : 'contacts';
+      const items = tab === 'objects' ? objects : tab === 'tenants' ? tenants : contacts;
+      for (const item of items) {
+        await supabase.from(table).delete().eq('id', item.id);
+      }
+      fetchAll();
+    }}
+      style={{background:'#FCEBEB', color:'#A32D2D', border:'1px solid #f5c0c0', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer'}}>
+      🗑 Очистить вкладку
+    </button>
+    <button onClick={async () => {
+      if (!window.confirm('Очистить ВСЮ корзину? Это нельзя отменить!')) return;
+      for (const o of objects) await supabase.from('objects').delete().eq('id', o.id);
+      for (const t of tenants) await supabase.from('tenants').delete().eq('id', t.id);
+      for (const c of contacts) await supabase.from('contacts').delete().eq('id', c.id);
+      fetchAll();
+    }}
+      style={{background:'#A32D2D', color:'#fff', border:'none', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer'}}>
+      🗑 Очистить всё
+    </button>
+  </div>
+</div>
 
       {loading ? <p>Загрузка...</p> : (
         <>
