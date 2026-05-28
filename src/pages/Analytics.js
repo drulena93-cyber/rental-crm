@@ -30,7 +30,7 @@ export default function Analytics() {
   const countable = filtered.filter(o => o.status !== 'Не учитывать');
   const rented = filtered.filter(o => o.status === 'Сдано');
   const free = filtered.filter(o => o.status === 'Не сдано');
-  const income = rented.reduce((a, b) => a + (b.rent || 0), 0);
+  
   const pct = countable.length ? Math.round(rented.length / countable.length * 100) : 0;
 
   const expiring = tenants.filter(t => {
@@ -53,7 +53,6 @@ export default function Analytics() {
   const floors = [1, 2, 3];
   const floorData = floors.map(f => ({
     floor: f,
-    income: objects.filter(o => o.floor === f && o.status === 'Сдано').reduce((a, b) => a + (b.rent || 0), 0),
     rented: objects.filter(o => o.floor === f && o.status === 'Сдано').length,
     total: objects.filter(o => o.floor === f && o.status !== 'Не учитывать').length,
   }));
@@ -81,7 +80,6 @@ export default function Analytics() {
         <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{filtered.length}</div></div>
         <div className="stat"><div className="stat-label">Сдано ({pct}%)</div><div className="stat-val green">{rented.length}</div></div>
         <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{free.length}</div></div>
-        <div className="stat"><div className="stat-label">Доход/мес</div><div className="stat-val amber">{income.toLocaleString('ru-RU')} ₽</div></div>
       </div>
 
       {expiring.length > 0 && (
@@ -102,7 +100,7 @@ export default function Analytics() {
             <div key={f.floor} style={{marginBottom: 12}}>
               <div style={{display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4}}>
                 <span>{f.floor} этаж</span>
-                <span style={{color:'#888'}}>{f.rented} из {f.total} · {f.income.toLocaleString('ru-RU')} ₽</span>
+                <span style={{color:'#888'}}>{f.rented} из {f.total}</span>
               </div>
               <div style={{background:'#f0f0f0', borderRadius:4, height:8}}>
                 <div style={{
