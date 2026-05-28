@@ -782,6 +782,7 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
     </button>
   </div>
 ))
+              }
               <div style={{marginTop:8}}>
                 <button style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'6px 12px', fontSize:12, cursor:'pointer'}}
                   onClick={() => { setSelected(null); openTenantsModal(selected); }}>
