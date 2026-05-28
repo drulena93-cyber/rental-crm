@@ -576,8 +576,6 @@ try {
 <div className="form-group"><label>Дата акта <span style={{fontSize:11, color:'#aaa'}}>(если отличается от даты счёта)</span></label>
   <input type="date" value={invoiceForm.дата_акта || ''} onChange={e => setInvoiceForm({...invoiceForm, дата_акта: e.target.value})} />
 </div>
-            </div>
-
             {/* Позиции */}
             <div style={{fontWeight:500, fontSize:13, marginBottom:8}}>Позиции</div>
             <table style={{width:'100%', borderCollapse:'collapse', marginBottom:8}}>
