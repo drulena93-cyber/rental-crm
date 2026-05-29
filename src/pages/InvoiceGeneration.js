@@ -55,6 +55,8 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [позиции, setПозиции] = useState([emptyItem()]);
   const [результаты, setРезультаты] = useState([]);
+  const [itemTemplates, setItemTemplates] = useState([]);
+const [showItemTemplates, setShowItemTemplates] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -92,7 +94,15 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
       if (defInvoice) setSelectedInvoiceTemplate(defInvoice);
       if (defAct) setSelectedActTemplate(defAct);
     } catch(e) {}
-
+try {
+  const itRes = await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `SELECT * FROM invoice_items_templates ORDER BY created_at`, params: [] })
+  });
+  const itData = await itRes.json();
+  setItemTemplates(itData.rows || []);
+} catch(e) {}
     setTenants(tens || []);
     setObjects(objs || []);
     setOrganizations(orgs || []);
@@ -419,10 +429,44 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
             </tbody>
           </table>
 
-          <button onClick={() => setПозиции([...позиции, emptyItem()])}
-            style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', marginBottom:8}}>
-            + Добавить позицию
-          </button>
+          <div style={{display:'flex', gap:8, marginBottom:8}}>
+  <button onClick={() => setПозиции([...позиции, emptyItem()])}
+    style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer'}}>
+    + Добавить позицию
+  </button>
+  <button onClick={() => setShowItemTemplates(!showItemTemplates)}
+    style={{background:'#f0f0ff', border:'1px solid #534AB7', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', color:'#534AB7'}}>
+    📋 Из шаблона
+  </button>
+</div>
+{showItemTemplates && itemTemplates.length > 0 && (
+  <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:8, padding:8, marginBottom:8}}>
+    <div style={{fontSize:12, color:'#888', marginBottom:6}}>Выберите позицию:</div>
+    <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+      {itemTemplates.map(it => (
+        <button key={it.id} onClick={() => {
+          const newItems = [...позиции];
+          const lastEmpty = newItems.findIndex(p => !p.наименование);
+          const idx = lastEmpty >= 0 ? lastEmpty : newItems.length;
+          if (lastEmpty < 0) newItems.push(emptyItem());
+          newItems[idx] = {
+            наименование: it.name,
+            количество: 1,
+            единица: it.unit || 'шт',
+            цена: it.price ? String(it.price) : '',
+            сумма: it.price ? String(it.price) : ''
+          };
+          setПозиции(newItems);
+          setShowItemTemplates(false);
+        }}
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', fontSize:12, cursor:'pointer', textAlign:'left'}}>
+          <div style={{fontWeight:500}}>{it.name}</div>
+          {it.price && <div style={{fontSize:11, color:'#888'}}>{parseFloat(it.price).toLocaleString('ru-RU')} ₽ / {it.unit || 'шт'}</div>}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
 
           <div style={{textAlign:'right', fontSize:13, fontWeight:500, marginBottom:12}}>
             Итого: {итого.toLocaleString('ru-RU', {minimumFractionDigits:2})} руб.
