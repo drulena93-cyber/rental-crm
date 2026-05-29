@@ -57,6 +57,8 @@ export default function Documents({ tenantId, tenantName, onClose }) {
   const [selectedActTemplate, setSelectedActTemplate] = useState('');
   const [tenant, setTenant] = useState(null);
   const [invoiceForm, setInvoiceForm] = useState({ номер: '', дата: '', дата_акта: '', позиции: [emptyItem()] });
+  const [showItemTemplates, setShowItemTemplates] = useState(false);
+const [itemTemplates, setItemTemplates] = useState([]);
   const fileRef = useRef();
 
   useEffect(() => { fetchAll(); }, [tenantId]);
@@ -77,6 +79,15 @@ export default function Documents({ tenantId, tenantName, onClose }) {
       const data = await res.json();
       setTemplates(data.items || []);
     } catch(e) { setTemplates([]); }
+    try {
+  const itRes = await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `SELECT * FROM invoice_items_templates ORDER BY created_at`, params: [] })
+  });
+  const itData = await itRes.json();
+  setItemTemplates(itData.rows || []);
+} catch(e) {}
 // Загружаем шаблоны по умолчанию
 try {
   const defRes = await fetch('/api/db', {
@@ -626,10 +637,43 @@ try {
               </tbody>
             </table>
 
-            <button onClick={addItem}
-              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', marginBottom:12}}>
-              + Добавить позицию
-            </button>
+            <div style={{display:'flex', gap:8, marginBottom:12}}>
+  <button onClick={addItem}
+    style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer'}}>
+    + Добавить позицию
+  </button>
+  <button onClick={() => setShowItemTemplates(!showItemTemplates)}
+    style={{background:'#f0f0ff', border:'1px solid #534AB7', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', color:'#534AB7'}}>
+    📋 Из шаблона
+  </button>
+</div>
+{showItemTemplates && itemTemplates.length > 0 && (
+  <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:8, padding:8, marginBottom:12}}>
+    <div style={{fontSize:12, color:'#888', marginBottom:8}}>Выберите позицию из шаблона:</div>
+    <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+      {itemTemplates.map(it => (
+        <button key={it.id} onClick={() => {
+          addItem();
+          const newItems = [...invoiceForm.позиции];
+          const lastIdx = newItems.length - 1;
+          newItems[lastIdx] = {
+            наименование: it.name,
+            количество: 1,
+            единица: it.unit || 'шт',
+            цена: it.price ? String(it.price) : '',
+            сумма: it.price ? String(it.price) : ''
+          };
+          setInvoiceForm({ ...invoiceForm, позиции: newItems });
+          setShowItemTemplates(false);
+        }}
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', fontSize:12, cursor:'pointer', textAlign:'left'}}>
+          <div style={{fontWeight:500}}>{it.name}</div>
+          {it.price && <div style={{fontSize:11, color:'#888'}}>{it.price.toLocaleString('ru-RU')} ₽ / {it.unit || 'шт'}</div>}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
 
             <div style={{textAlign:'right', fontSize:13, fontWeight:500, marginBottom:12}}>
               Итого: {итого.toLocaleString('ru-RU', {minimumFractionDigits:2})} руб.
