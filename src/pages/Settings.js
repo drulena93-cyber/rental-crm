@@ -5,7 +5,9 @@ export default function Settings() {
   const [orgs, setOrgs] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [docTypes, setDocTypes] = useState([]);
+  const [itemTemplates, setItemTemplates] = useState([]);
   const [newDocType, setNewDocType] = useState('');
+  const [newItem, setNewItem] = useState({ name: '', price: '', unit: 'шт' });
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
@@ -25,6 +27,7 @@ export default function Settings() {
     await fetchTemplates();
     await fetchDocTypes();
     await fetchDefaults();
+    await fetchItemTemplates();
     setLoading(false);
   }
 
@@ -59,6 +62,16 @@ export default function Settings() {
     setDefaultContractTemplate(rows.find(r => r.id === 'default_contract_template')?.value || '');
   }
 
+  async function fetchItemTemplates() {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT * FROM invoice_items_templates ORDER BY created_at`, params: [] })
+    });
+    const data = await res.json();
+    setItemTemplates(data.rows || []);
+  }
+
   async function saveDefaults() {
     setSavingDefaults(true);
     await fetch('/api/db', {
@@ -90,6 +103,30 @@ export default function Settings() {
       body: JSON.stringify({ query: `DELETE FROM document_types WHERE id = $1`, params: [id] })
     });
     fetchDocTypes();
+  }
+
+  async function addItemTemplate() {
+    if (!newItem.name.trim()) return alert('Введите наименование');
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `INSERT INTO invoice_items_templates (name, price, unit) VALUES ($1, $2, $3)`,
+        params: [newItem.name.trim(), newItem.price ? parseFloat(newItem.price) : null, newItem.unit || 'шт']
+      })
+    });
+    setNewItem({ name: '', price: '', unit: 'шт' });
+    fetchItemTemplates();
+  }
+
+  async function deleteItemTemplate(id) {
+    if (!window.confirm('Удалить шаблон позиции?')) return;
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `DELETE FROM invoice_items_templates WHERE id = $1`, params: [id] })
+    });
+    fetchItemTemplates();
   }
 
   function openAdd() {
@@ -228,6 +265,60 @@ export default function Settings() {
         <button className="btn-save" onClick={saveDefaults} disabled={savingDefaults}>
           {savingDefaults ? 'Сохраняется...' : '💾 Сохранить'}
         </button>
+      </div>
+
+      {/* Шаблоны позиций */}
+      <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Шаблоны позиций для счетов и актов</div>
+      <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:24}}>
+        <div style={{display:'grid', gridTemplateColumns:'2fr 1fr 1fr auto', gap:8, marginBottom:16, alignItems:'end'}}>
+          <div className="form-group" style={{margin:0}}>
+            <label>Наименование *</label>
+            <input value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})}
+              placeholder="Аренда помещения за июль 2026г."
+              onKeyDown={e => { if(e.key === 'Enter') addItemTemplate(); }} />
+          </div>
+          <div className="form-group" style={{margin:0}}>
+            <label>Цена (₽)</label>
+            <input type="number" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})}
+              placeholder="0.00" />
+          </div>
+          <div className="form-group" style={{margin:0}}>
+            <label>Единица</label>
+            <input value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})}
+              placeholder="шт" />
+          </div>
+          <button className="btn-add" onClick={addItemTemplate} style={{height:36}}>+ Добавить</button>
+        </div>
+
+        {itemTemplates.length === 0 ? (
+          <div style={{color:'#aaa', fontSize:13, textAlign:'center', padding:20}}>Шаблоны позиций не добавлены</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Наименование</th>
+                <th>Цена</th>
+                <th>Единица</th>
+                <th style={{width:80}}>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemTemplates.map(it => (
+                <tr key={it.id}>
+                  <td>{it.name}</td>
+                  <td>{it.price ? it.price.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+                  <td>{it.unit || 'шт'}</td>
+                  <td>
+                    <button onClick={() => deleteItemTemplate(it.id)}
+                      style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Типы документов */}
