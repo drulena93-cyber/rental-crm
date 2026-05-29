@@ -70,7 +70,7 @@ const [showItemTemplates, setShowItemTemplates] = useState(false);
 
   async function fetchAll() {
     setLoading(true);
-    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).eq('status', 'Активный').order('name');
+    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null);
     const { data: orgs } = await supabase.from('organizations').select('*').order('name');
 
@@ -114,11 +114,11 @@ try {
   const getObject = (id) => objects.find(o => o.id === id);
 
   const filteredTenants = tenants.filter(t => {
-    if (filterInvoice && !t.in_invoice) return false;
-    if (search && !t.name?.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
+  if (t.status !== 'Активный') return false;
+  if (filterInvoice && !t.in_invoice) return false;
+  if (search && !t.name?.toLowerCase().includes(search.toLowerCase())) return false;
+  return true;
+});
   function toggleTenant(id) {
     setSelectedTenants(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   }
