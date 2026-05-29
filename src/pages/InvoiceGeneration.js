@@ -57,6 +57,8 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
   const [результаты, setРезультаты] = useState([]);
   const [itemTemplates, setItemTemplates] = useState([]);
   const [showItemTemplates, setShowItemTemplates] = useState(false);
+  // ── Новый state: какие арендаторы уже получили документы за текущий месяц ──
+  const [tenantDocStatus, setTenantDocStatus] = useState({}); // { tenantId: ['Счёт', 'Акт'] }
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -101,6 +103,62 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
       });
       const itData = await itRes.json();
       setItemTemplates(itData.rows || []);
+    } catch(e) {}
+
+    // ── Загружаем статусы документов за текущий месяц ──────────────────────
+    try {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const docStatusRes = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `SELECT tenant_id, type FROM documents WHERE created_at >= $1 AND type IN ('Счёт','Акт')`,
+          params: [monthStart]
+        })
+      });
+      const docStatusData = await docStatusRes.json();
+      const statusMap = {};
+      for (const row of docStatusData.rows || []) {
+        if (!statusMap[row.tenant_id]) statusMap[row.tenant_id] = new Set();
+        statusMap[row.tenant_id].add(row.type);
+      }
+      // Конвертируем Set в массив
+      const finalMap = {};
+      for (const [id, types] of Object.entries(statusMap)) {
+        finalMap[id] = [...types];
+      }
+      setTenantDocStatus(finalMap);
+    } catch(e) {}
+
+    // ── Загружаем результаты за последние 7 дней ───────────────────────────
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const recentRes = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `SELECT d.id, d.tenant_id, d.name, d.type, d.amount, d.yandex_path, d.created_at, t.name as tenant_name
+                  FROM documents d
+                  LEFT JOIN tenants t ON t.id = d.tenant_id
+                  WHERE d.created_at >= $1 AND d.type IN ('Счёт','Акт')
+                  ORDER BY d.created_at DESC`,
+          params: [sevenDaysAgo]
+        })
+      });
+      const recentData = await recentRes.json();
+      const loaded = (recentData.rows || []).map(row => ({
+        tenantId: row.tenant_id,
+        tenant: row.tenant_name || '—',
+        type: row.type,
+        status: '✅',
+        name: row.name,
+        docId: row.id,
+        yandexPath: row.yandex_path,
+        amount: row.amount ? parseFloat(row.amount) : null,
+        createdAt: row.created_at,
+      }));
+      setРезультаты(loaded);
     } catch(e) {}
 
     setTenants(tens || []);
@@ -154,7 +212,6 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
     return await res.json();
   }
 
-  // ── Удаление документа (из БД + Яндекс Диск) ──────────────────────────────
   async function deleteResult(resultItem) {
     if (!window.confirm('Удалить документ из карточки и Яндекс Диска?')) return;
     try {
@@ -171,6 +228,21 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
         body: JSON.stringify({ query: `DELETE FROM documents WHERE id = $1`, params: [resultItem.docId] })
       });
       setРезультаты(prev => prev.filter(r => r.docId !== resultItem.docId));
+      // Обновляем статус арендатора в списке
+      setTenantDocStatus(prev => {
+        const updated = { ...prev };
+        // Проверяем остались ли ещё документы этого типа у арендатора
+        const stillHas = результаты.some(r =>
+          r.docId !== resultItem.docId &&
+          r.tenantId === resultItem.tenantId &&
+          r.type === resultItem.type
+        );
+        if (!stillHas && updated[resultItem.tenantId]) {
+          updated[resultItem.tenantId] = updated[resultItem.tenantId].filter(t => t !== resultItem.type);
+          if (updated[resultItem.tenantId].length === 0) delete updated[resultItem.tenantId];
+        }
+        return updated;
+      });
     } catch(e) {
       alert('Ошибка удаления: ' + e.message);
     }
@@ -268,7 +340,6 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
     const desc = позиции.map(p => p.наименование).filter(Boolean).join(', ');
     const createdAt = new Date().toISOString();
 
-    // ── Сохраняем в БД и получаем id документа ────────────────────────────
     const insertRes = await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -300,9 +371,7 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
     if (type !== 'invoice' && !selectedActTemplate) return alert('Выберите шаблон акта');
 
     setGenerating(true);
-    setРезультаты([]);
-    const results = [];
-
+    const newResults = [];
     const tenantsToProcess = tenants.filter(t => selectedTenants.includes(t.id));
 
     for (let i = 0; i < tenantsToProcess.length; i++) {
@@ -312,38 +381,34 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
       try {
         if (type === 'both' || type === 'invoice') {
           const r = await generateForTenant(tenant, 'invoice');
-          results.push({
-            tenantId: tenant.id,
-            tenant: tenant.name,
-            type: 'Счёт',
-            status: '✅',
-            name: r.name,
-            docId: r.docId,
-            yandexPath: r.yandexPath,
-            amount: r.amount,
-            createdAt: r.createdAt,
+          newResults.push({
+            tenantId: tenant.id, tenant: tenant.name, type: 'Счёт', status: '✅',
+            name: r.name, docId: r.docId, yandexPath: r.yandexPath, amount: r.amount, createdAt: r.createdAt,
           });
+          // Обновляем статус в списке арендаторов
+          setTenantDocStatus(prev => ({
+            ...prev,
+            [tenant.id]: [...new Set([...(prev[tenant.id] || []), 'Счёт'])]
+          }));
         }
         if (type === 'both' || type === 'act') {
           const r = await generateForTenant(tenant, 'act');
-          results.push({
-            tenantId: tenant.id,
-            tenant: tenant.name,
-            type: 'Акт',
-            status: '✅',
-            name: r.name,
-            docId: r.docId,
-            yandexPath: r.yandexPath,
-            amount: r.amount,
-            createdAt: r.createdAt,
+          newResults.push({
+            tenantId: tenant.id, tenant: tenant.name, type: 'Акт', status: '✅',
+            name: r.name, docId: r.docId, yandexPath: r.yandexPath, amount: r.amount, createdAt: r.createdAt,
           });
+          setTenantDocStatus(prev => ({
+            ...prev,
+            [tenant.id]: [...new Set([...(prev[tenant.id] || []), 'Акт'])]
+          }));
         }
       } catch(e) {
-        results.push({ tenant: tenant.name, type, status: '❌', name: e.message, docId: null });
+        newResults.push({ tenant: tenant.name, type, status: '❌', name: e.message, docId: null });
       }
     }
 
-    setРезультаты(results);
+    // Добавляем новые результаты в начало списка (не заменяем!)
+    setРезультаты(prev => [...newResults, ...prev]);
     setProgress({ current: 0, total: 0, name: '' });
     setGenerating(false);
   }
@@ -359,7 +424,6 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
 
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
 
-        {/* Левая колонка — арендаторы */}
         <div>
           <div style={{fontWeight:500, fontSize:14, marginBottom:12}}>👥 Арендаторы</div>
           <div style={{display:'flex', gap:8, marginBottom:8, flexWrap:'wrap'}}>
@@ -382,12 +446,25 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
                filteredTenants.length === 0 ? <div style={{padding:20, textAlign:'center', color:'#aaa'}}>Нет арендаторов</div> :
                filteredTenants.map(t => {
                 const obj = getObject(t.object_id);
+                const docTypes = tenantDocStatus[t.id] || [];
+                const isDone = docTypes.length > 0;
                 return (
-                  <div key={t.id} style={{padding:'10px 12px', borderBottom:'1px solid #f0f0f0', display:'flex', alignItems:'center', gap:8, cursor:'pointer', background: selectedTenants.includes(t.id) ? '#f0f0ff' : '#fff'}}
+                  <div key={t.id} style={{
+                    padding:'10px 12px', borderBottom:'1px solid #f0f0f0',
+                    display:'flex', alignItems:'center', gap:8, cursor:'pointer',
+                    background: selectedTenants.includes(t.id) ? '#f0f0ff' : isDone ? '#f0fff4' : '#fff'
+                  }}
                     onClick={() => toggleTenant(t.id)}>
                     <input type="checkbox" checked={selectedTenants.includes(t.id)} onChange={() => {}} />
                     <div style={{flex:1}}>
-                      <div style={{fontSize:13, fontWeight:500}}>{t.name}</div>
+                      <div style={{fontSize:13, fontWeight:500, display:'flex', alignItems:'center', gap:6}}>
+                        {t.name}
+                        {isDone && (
+                          <span style={{fontSize:11, color:'#3B6D11', background:'#EAF3DE', borderRadius:4, padding:'1px 6px'}}>
+                            ✅ {docTypes.join(', ')}
+                          </span>
+                        )}
+                      </div>
                       {obj && <div style={{fontSize:11, color:'#888'}}>{obj.name} — {obj.rent?.toLocaleString('ru-RU')} ₽/мес</div>}
                     </div>
                   </div>
@@ -397,7 +474,6 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
           </div>
         </div>
 
-        {/* Правая колонка — настройки генерации */}
         <div>
           <div style={{fontWeight:500, fontSize:14, marginBottom:12}}>⚙️ Настройки генерации</div>
 
@@ -429,7 +505,6 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
             </div>
           </div>
 
-          {/* Позиции */}
           <div style={{fontWeight:500, fontSize:13, marginBottom:8}}>Позиции</div>
           <table style={{width:'100%', borderCollapse:'collapse', marginBottom:8}}>
             <thead>
@@ -497,11 +572,8 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
                     const idx = lastEmpty >= 0 ? lastEmpty : newItems.length;
                     if (lastEmpty < 0) newItems.push(emptyItem());
                     newItems[idx] = {
-                      наименование: it.name,
-                      количество: 1,
-                      единица: it.unit || 'шт',
-                      цена: it.price ? String(it.price) : '',
-                      сумма: it.price ? String(it.price) : ''
+                      наименование: it.name, количество: 1, единица: it.unit || 'шт',
+                      цена: it.price ? String(it.price) : '', сумма: it.price ? String(it.price) : ''
                     };
                     setПозиции(newItems);
                     setShowItemTemplates(false);
@@ -547,10 +619,12 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
         </div>
       </div>
 
-      {/* Результаты */}
       {результаты.length > 0 && (
         <div style={{marginTop:24}}>
-          <div style={{fontWeight:500, fontSize:14, marginBottom:12}}>📋 Результаты генерации</div>
+          <div style={{fontWeight:500, fontSize:14, marginBottom:12}}>
+            📋 Результаты генерации
+            <span style={{fontSize:12, color:'#888', fontWeight:400, marginLeft:8}}>за последние 7 дней</span>
+          </div>
           <table>
             <thead>
               <tr>
@@ -565,13 +639,11 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
             </thead>
             <tbody>
               {результаты.map((r, i) => (
-                <tr key={i}>
+                <tr key={r.docId || i}>
                   <td>
                     {r.tenantId ? (
-                      <span
-                        style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
-                        onClick={() => onNavigate('tenants', r.tenantId)}
-                      >
+                      <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
+                        onClick={() => onNavigate('tenants', r.tenantId)}>
                         {r.tenant}
                       </span>
                     ) : r.tenant}
@@ -590,8 +662,7 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
                   <td style={{textAlign:'center'}}>{r.status}</td>
                   <td style={{textAlign:'center'}}>
                     {r.docId && (
-                      <button
-                        onClick={() => deleteResult(r)}
+                      <button onClick={() => deleteResult(r)}
                         title="Удалить документ из карточки и Яндекс Диска"
                         style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:16, lineHeight:1}}>
                         ✕
