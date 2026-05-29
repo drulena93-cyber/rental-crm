@@ -56,13 +56,12 @@ export default function InvoiceGeneration({ onNavigate, initialData }) {
   const [позиции, setПозиции] = useState([emptyItem()]);
   const [результаты, setРезультаты] = useState([]);
   const [itemTemplates, setItemTemplates] = useState([]);
-const [showItemTemplates, setShowItemTemplates] = useState(false);
+  const [showItemTemplates, setShowItemTemplates] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
   useEffect(() => {
     if (initialData) {
-      // Предзаполняем из переданных данных (копирование счёта)
       if (initialData.позиции) setПозиции(initialData.позиции);
       if (initialData.tenantId) setSelectedTenants([initialData.tenantId]);
     }
@@ -80,7 +79,6 @@ const [showItemTemplates, setShowItemTemplates] = useState(false);
       setTemplates(data.items || []);
     } catch(e) { setTemplates([]); }
 
-    // Загружаем шаблоны по умолчанию
     try {
       const defRes = await fetch('/api/db', {
         method: 'POST',
@@ -94,15 +92,17 @@ const [showItemTemplates, setShowItemTemplates] = useState(false);
       if (defInvoice) setSelectedInvoiceTemplate(defInvoice);
       if (defAct) setSelectedActTemplate(defAct);
     } catch(e) {}
-try {
-  const itRes = await fetch('/api/db', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: `SELECT * FROM invoice_items_templates ORDER BY created_at`, params: [] })
-  });
-  const itData = await itRes.json();
-  setItemTemplates(itData.rows || []);
-} catch(e) {}
+
+    try {
+      const itRes = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT * FROM invoice_items_templates ORDER BY created_at`, params: [] })
+      });
+      const itData = await itRes.json();
+      setItemTemplates(itData.rows || []);
+    } catch(e) {}
+
     setTenants(tens || []);
     setObjects(objs || []);
     setOrganizations(orgs || []);
@@ -114,11 +114,12 @@ try {
   const getObject = (id) => objects.find(o => o.id === id);
 
   const filteredTenants = tenants.filter(t => {
-  if (t.status !== 'Активный') return false;
-  if (filterInvoice && !t.in_invoice) return false;
-  if (search && !t.name?.toLowerCase().includes(search.toLowerCase())) return false;
-  return true;
-});
+    if (t.status !== 'Активный') return false;
+    if (filterInvoice && !t.in_invoice) return false;
+    if (search && !t.name?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
   function toggleTenant(id) {
     setSelectedTenants(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   }
@@ -153,6 +154,28 @@ try {
     return await res.json();
   }
 
+  // ── Удаление документа (из БД + Яндекс Диск) ──────────────────────────────
+  async function deleteResult(resultItem) {
+    if (!window.confirm('Удалить документ из карточки и Яндекс Диска?')) return;
+    try {
+      if (resultItem.yandexPath) {
+        await fetch('/api/yandex-templates', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: resultItem.yandexPath })
+        });
+      }
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `DELETE FROM documents WHERE id = $1`, params: [resultItem.docId] })
+      });
+      setРезультаты(prev => prev.filter(r => r.docId !== resultItem.docId));
+    } catch(e) {
+      alert('Ошибка удаления: ' + e.message);
+    }
+  }
+
   async function generateForTenant(tenant, type) {
     const org = organizations.find(o => o.id === selectedOrg);
     const templatePath = type === 'invoice' ? selectedInvoiceTemplate : selectedActTemplate;
@@ -172,7 +195,6 @@ try {
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const arrayBuffer = bytes.buffer;
 
-    // Получаем следующий номер
     const counterKey = type === 'invoice' ? 'last_number_счет' : 'last_number_акт';
     const numRes = await fetch('/api/db', {
       method: 'POST',
@@ -244,17 +266,22 @@ try {
 
     const result = await uploadToYandex(base64, `${Date.now()}_${docName}.docx`, `Документы/${tenant.name}`);
     const desc = позиции.map(p => p.наименование).filter(Boolean).join(', ');
+    const createdAt = new Date().toISOString();
 
-    await fetch('/api/db', {
+    // ── Сохраняем в БД и получаем id документа ────────────────────────────
+    const insertRes = await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description, amount, items) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        params: [tenant.id, docName, docType, result.public_url || '', blob.size, result.path || '', desc, итого, JSON.stringify(позиции)]
+        query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description, amount, items, created_at)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        params: [tenant.id, docName, docType, result.public_url || '', blob.size,
+                 result.path || '', desc, итого, JSON.stringify(позиции), createdAt]
       })
     });
+    const insertData = await insertRes.json();
+    const docId = insertData.rows?.[0]?.id || null;
 
-    // Обновляем счётчик
     await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -262,7 +289,7 @@ try {
     });
 
     saveAs(blob, `${docName}.docx`);
-    return { name: docName, url: result.public_url };
+    return { name: docName, url: result.public_url, docId, yandexPath: result.path || '', amount: итого, createdAt };
   }
 
   async function generateAll(type) {
@@ -285,14 +312,34 @@ try {
       try {
         if (type === 'both' || type === 'invoice') {
           const r = await generateForTenant(tenant, 'invoice');
-          results.push({ tenant: tenant.name, type: 'Счёт', status: '✅', name: r.name });
+          results.push({
+            tenantId: tenant.id,
+            tenant: tenant.name,
+            type: 'Счёт',
+            status: '✅',
+            name: r.name,
+            docId: r.docId,
+            yandexPath: r.yandexPath,
+            amount: r.amount,
+            createdAt: r.createdAt,
+          });
         }
         if (type === 'both' || type === 'act') {
           const r = await generateForTenant(tenant, 'act');
-          results.push({ tenant: tenant.name, type: 'Акт', status: '✅', name: r.name });
+          results.push({
+            tenantId: tenant.id,
+            tenant: tenant.name,
+            type: 'Акт',
+            status: '✅',
+            name: r.name,
+            docId: r.docId,
+            yandexPath: r.yandexPath,
+            amount: r.amount,
+            createdAt: r.createdAt,
+          });
         }
       } catch(e) {
-        results.push({ tenant: tenant.name, type, status: '❌', name: e.message });
+        results.push({ tenant: tenant.name, type, status: '❌', name: e.message, docId: null });
       }
     }
 
@@ -430,50 +477,49 @@ try {
           </table>
 
           <div style={{display:'flex', gap:8, marginBottom:8}}>
-  <button onClick={() => setПозиции([...позиции, emptyItem()])}
-    style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer'}}>
-    + Добавить позицию
-  </button>
-  <button onClick={() => setShowItemTemplates(!showItemTemplates)}
-    style={{background:'#f0f0ff', border:'1px solid #534AB7', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', color:'#534AB7'}}>
-    📋 Из шаблона
-  </button>
-</div>
-{showItemTemplates && itemTemplates.length > 0 && (
-  <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:8, padding:8, marginBottom:8}}>
-    <div style={{fontSize:12, color:'#888', marginBottom:6}}>Выберите позицию:</div>
-    <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-      {itemTemplates.map(it => (
-        <button key={it.id} onClick={() => {
-          const newItems = [...позиции];
-          const lastEmpty = newItems.findIndex(p => !p.наименование);
-          const idx = lastEmpty >= 0 ? lastEmpty : newItems.length;
-          if (lastEmpty < 0) newItems.push(emptyItem());
-          newItems[idx] = {
-            наименование: it.name,
-            количество: 1,
-            единица: it.unit || 'шт',
-            цена: it.price ? String(it.price) : '',
-            сумма: it.price ? String(it.price) : ''
-          };
-          setПозиции(newItems);
-          setShowItemTemplates(false);
-        }}
-          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', fontSize:12, cursor:'pointer', textAlign:'left'}}>
-          <div style={{fontWeight:500}}>{it.name}</div>
-          {it.price && <div style={{fontSize:11, color:'#888'}}>{parseFloat(it.price).toLocaleString('ru-RU')} ₽ / {it.unit || 'шт'}</div>}
-        </button>
-      ))}
-    </div>
-  </div>
-)}
+            <button onClick={() => setПозиции([...позиции, emptyItem()])}
+              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer'}}>
+              + Добавить позицию
+            </button>
+            <button onClick={() => setShowItemTemplates(!showItemTemplates)}
+              style={{background:'#f0f0ff', border:'1px solid #534AB7', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', color:'#534AB7'}}>
+              📋 Из шаблона
+            </button>
+          </div>
+          {showItemTemplates && itemTemplates.length > 0 && (
+            <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:8, padding:8, marginBottom:8}}>
+              <div style={{fontSize:12, color:'#888', marginBottom:6}}>Выберите позицию:</div>
+              <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+                {itemTemplates.map(it => (
+                  <button key={it.id} onClick={() => {
+                    const newItems = [...позиции];
+                    const lastEmpty = newItems.findIndex(p => !p.наименование);
+                    const idx = lastEmpty >= 0 ? lastEmpty : newItems.length;
+                    if (lastEmpty < 0) newItems.push(emptyItem());
+                    newItems[idx] = {
+                      наименование: it.name,
+                      количество: 1,
+                      единица: it.unit || 'шт',
+                      цена: it.price ? String(it.price) : '',
+                      сумма: it.price ? String(it.price) : ''
+                    };
+                    setПозиции(newItems);
+                    setShowItemTemplates(false);
+                  }}
+                    style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', fontSize:12, cursor:'pointer', textAlign:'left'}}>
+                    <div style={{fontWeight:500}}>{it.name}</div>
+                    {it.price && <div style={{fontSize:11, color:'#888'}}>{parseFloat(it.price).toLocaleString('ru-RU')} ₽ / {it.unit || 'шт'}</div>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{textAlign:'right', fontSize:13, fontWeight:500, marginBottom:12}}>
             Итого: {итого.toLocaleString('ru-RU', {minimumFractionDigits:2})} руб.
             <div style={{fontSize:11, color:'#888', fontWeight:400}}>{numberToWords(итого)}</div>
           </div>
 
-          {/* Прогресс */}
           {generating && progress.total > 0 && (
             <div style={{background:'#f0f0ff', border:'1px solid #534AB7', borderRadius:8, padding:12, marginBottom:12}}>
               <div style={{fontSize:13, marginBottom:6}}>
@@ -511,16 +557,47 @@ try {
                 <th>Арендатор</th>
                 <th>Тип</th>
                 <th>Документ</th>
-                <th>Статус</th>
+                <th style={{textAlign:'right'}}>Сумма</th>
+                <th>Дата генерации</th>
+                <th style={{textAlign:'center'}}>Статус</th>
+                <th style={{width:40}}></th>
               </tr>
             </thead>
             <tbody>
               {результаты.map((r, i) => (
                 <tr key={i}>
-                  <td>{r.tenant}</td>
+                  <td>
+                    {r.tenantId ? (
+                      <span
+                        style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
+                        onClick={() => onNavigate('tenants', r.tenantId)}
+                      >
+                        {r.tenant}
+                      </span>
+                    ) : r.tenant}
+                  </td>
                   <td>{r.type}</td>
                   <td style={{fontSize:12}}>{r.name}</td>
-                  <td>{r.status}</td>
+                  <td style={{textAlign:'right', fontSize:12, fontWeight:500, whiteSpace:'nowrap'}}>
+                    {r.amount != null ? r.amount.toLocaleString('ru-RU', {minimumFractionDigits:2}) + ' ₽' : '—'}
+                  </td>
+                  <td style={{fontSize:12, color:'#555', whiteSpace:'nowrap'}}>
+                    {r.createdAt ? new Date(r.createdAt).toLocaleString('ru-RU', {
+                      day:'2-digit', month:'2-digit', year:'numeric',
+                      hour:'2-digit', minute:'2-digit'
+                    }) : '—'}
+                  </td>
+                  <td style={{textAlign:'center'}}>{r.status}</td>
+                  <td style={{textAlign:'center'}}>
+                    {r.docId && (
+                      <button
+                        onClick={() => deleteResult(r)}
+                        title="Удалить документ из карточки и Яндекс Диска"
+                        style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:16, lineHeight:1}}>
+                        ✕
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
