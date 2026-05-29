@@ -14,6 +14,7 @@ export default function App() {
   const [highlightId, setHighlightId] = useState(null);
   const [contactTenantId, setContactTenantId] = useState(null);
   const [generationData, setGenerationData] = useState(null);
+  const [navStack, setNavStack] = useState([]);
 
   function changeTab(newTab) {
     setTab(newTab);
@@ -21,6 +22,9 @@ export default function App() {
   }
 
   function handleNavigate(section, id, data) {
+    // Сохраняем текущее состояние в стек
+    setNavStack(prev => [...prev, { tab, highlightId, contactTenantId, generationData }]);
+
     if (section === 'tenants') {
       changeTab('tenants');
       setHighlightId(id);
@@ -38,19 +42,44 @@ export default function App() {
     }
   }
 
+  function handleBack() {
+    if (navStack.length === 0) return;
+    const prev = navStack[navStack.length - 1];
+    setNavStack(s => s.slice(0, -1));
+    setTab(prev.tab);
+    setHighlightId(prev.highlightId);
+    setContactTenantId(prev.contactTenantId);
+    setGenerationData(prev.generationData);
+    localStorage.setItem('active_tab', prev.tab);
+  }
+
+  function handleTabClick(newTab) {
+    setNavStack([]);
+    setHighlightId(null);
+    setContactTenantId(null);
+    setGenerationData(null);
+    changeTab(newTab);
+  }
+
   return (
     <div className="app">
       <div className="topbar">
         <div className="logo">🏢 CRM Аренда</div>
         <nav className="tabs">
-          <button className={tab === 'objects' ? 'active' : ''} onClick={() => changeTab('objects')}>Объекты</button>
-          <button className={tab === 'tenants' ? 'active' : ''} onClick={() => changeTab('tenants')}>Арендаторы</button>
-          <button className={tab === 'contacts' ? 'active' : ''} onClick={() => changeTab('contacts')}>Контакты</button>
-          <button className={tab === 'documents' ? 'active' : ''} onClick={() => changeTab('documents')}>📄 Документы</button>
-          <button className={tab === 'generation' ? 'active' : ''} onClick={() => changeTab('generation')}>✨ Генерация</button>
-          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => changeTab('analytics')}>Аналитика</button>
-          <button className={tab === 'trash' ? 'active' : ''} onClick={() => changeTab('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
-          <button className={tab === 'settings' ? 'active' : ''} onClick={() => changeTab('settings')}>⚙️ Настройки</button>
+          {navStack.length > 0 && (
+            <button onClick={handleBack}
+              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer', marginRight:8, whiteSpace:'nowrap'}}>
+              ← Назад
+            </button>
+          )}
+          <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
+          <button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
+          <button className={tab === 'contacts' ? 'active' : ''} onClick={() => handleTabClick('contacts')}>Контакты</button>
+          <button className={tab === 'documents' ? 'active' : ''} onClick={() => handleTabClick('documents')}>📄 Документы</button>
+          <button className={tab === 'generation' ? 'active' : ''} onClick={() => handleTabClick('generation')}>✨ Генерация</button>
+          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>Аналитика</button>
+          <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
         </nav>
       </div>
       <div className="content">
