@@ -7,6 +7,7 @@ import Trash from './pages/Trash';
 import Settings from './pages/Settings';
 import AllDocuments from './pages/AllDocuments';
 import InvoiceGeneration from './pages/InvoiceGeneration';
+import Buildings from './pages/Buildings';
 import './App.css';
 
 export default function App() {
@@ -72,8 +73,9 @@ export default function App() {
               ← Назад
             </button>
           )}
-          <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
-          <button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
+          <button className={tab === 'buildings' ? 'active' : ''} onClick={() => handleTabClick('buildings')}>🏢 Здания</button>
+            <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
+<button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
           <button className={tab === 'contacts' ? 'active' : ''} onClick={() => handleTabClick('contacts')}>Контакты</button>
           <button className={tab === 'documents' ? 'active' : ''} onClick={() => handleTabClick('documents')}>📄 Документы</button>
           <button className={tab === 'generation' ? 'active' : ''} onClick={() => handleTabClick('generation')}>✨ Генерация</button>
@@ -84,6 +86,7 @@ export default function App() {
       </div>
       <div className="content">
         {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} />}
+         {tab === 'buildings' && <Buildings onNavigate={handleNavigate} />}
         {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} />}
         {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
         {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
