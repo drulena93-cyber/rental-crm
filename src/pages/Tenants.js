@@ -6,7 +6,63 @@ const PAGE_SIZE = 30;
 const CACHE_KEY = 'tenants_cache';
 const CACHE_TIME_KEY = 'tenants_cache_time';
 const CACHE_TTL = 60 * 1000;
+const MONTHS_FULL = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
+function TenantPayments({ tenantId }) {
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { fetchPayments(); }, [tenantId]);
+
+  async function fetchPayments() {
+    setLoading(true);
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT * FROM payments WHERE tenant_id = $1 ORDER BY period_year DESC, period_month DESC LIMIT 12`,
+        params: [tenantId]
+      })
+    });
+    const data = await res.json();
+    setPayments(data.rows || []);
+    setLoading(false);
+  }
+
+  if (loading) return <div style={{fontSize:12, color:'#aaa'}}>Загрузка...</div>;
+  if (payments.length === 0) return <div style={{fontSize:12, color:'#aaa'}}>Оплат не найдено</div>;
+
+  return (
+    <table style={{fontSize:12, width:'100%'}}>
+      <thead>
+        <tr>
+          <th style={{textAlign:'left'}}>Период</th>
+          <th style={{textAlign:'right'}}>Сумма</th>
+          <th>Способ</th>
+          <th>Статус</th>
+          <th>Комментарий</th>
+        </tr>
+      </thead>
+      <tbody>
+        {payments.map(p => (
+          <tr key={p.id}>
+            <td>{MONTHS_FULL[p.period_month - 1]} {p.period_year}</td>
+            <td style={{textAlign:'right', fontWeight:500}}>{p.amount ? parseFloat(p.amount).toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+            <td style={{color:'#888'}}>{p.payment_method || '—'}</td>
+            <td>
+              <span style={{
+                background: p.status === 'Оплачено' ? '#EAF3DE' : p.status === 'Частично' ? '#FFF8E1' : '#FCEBEB',
+                color: p.status === 'Оплачено' ? '#3B6D11' : p.status === 'Частично' ? '#f0a500' : '#A32D2D',
+                borderRadius: 4, padding: '1px 6px', fontSize: 11
+              }}>{p.status}</span>
+            </td>
+            <td style={{color:'#888'}}>{p.comment || '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 export default function Tenants({ onNavigate, highlightId }) {
   const [tenants, setTenants] = useState([]);
   const [objects, setObjects] = useState([]);
