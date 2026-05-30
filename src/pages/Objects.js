@@ -381,7 +381,12 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
     setShowForm(false);
     fetchAll(true);
   }
-
+async function deleteObj(id) {
+  if (!window.confirm('Переместить объект в корзину?')) return;
+  await supabase.from('objects').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  setSelected(null);
+  fetchAll(true);
+}
   async function confirmCheckout() {
   try {
     await supabase.from('tenants').update({ status: 'Съехал' }).eq('id', checkoutData.tenantId);
