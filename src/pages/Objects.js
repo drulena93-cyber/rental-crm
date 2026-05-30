@@ -545,7 +545,18 @@ async function deleteObj(id) {
                         ) : statusBadge(o)}
                       </td>
                       <td>{o.floor || '—'}</td>
-                        <td>{o.office || '—'}</td>
+                        <td onClick={e => e.stopPropagation()}>
+  {editingField === o.id+'_office' ? (
+    <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
+      onBlur={() => quickUpdate(o.id, 'office', editingValue)}
+      onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'office', editingValue); if(e.key==='Escape') setEditingField(null); }}
+      style={{width:80}} />
+  ) : (
+    <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_office'); setEditingValue(o.office||''); }}>
+      {o.office || '— ✎'}
+    </span>
+  )}
+</td>
                       <td>{o.area ? `${o.area} м²` : '—'}</td>
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{display:'flex', flexDirection:'column', gap:2}}>
