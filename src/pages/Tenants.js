@@ -30,6 +30,7 @@ export default function Tenants({ onNavigate, highlightId }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [tenantHistory, setTenantHistory] = useState([]);
   const [tenantTotalRent, setTenantTotalRent] = useState(0);
+  const [objectTenants, setObjectTenants] = useState([]); // все связи объект-арендатор
   const [showCheckoutTenant, setShowCheckoutTenant] = useState(false);
   const [checkoutTenantData, setCheckoutTenantData] = useState({ date: '', comment: '' });
   const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
@@ -65,9 +66,10 @@ export default function Tenants({ onNavigate, highlightId }) {
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
         try {
-          const { tens, objs } = JSON.parse(cached);
-          setTenants(tens || []);
-          setObjects(objs || []);
+          const { tens, objs, ot } = JSON.parse(cached);
+setTenants(tens || []);
+setObjects(objs || []);
+setObjectTenants(ot || []);
           setLastUpdated(new Date(parseInt(cachedTime)));
           setLoading(false);
           return;
@@ -76,9 +78,16 @@ export default function Tenants({ onNavigate, highlightId }) {
     }
     forceRefresh ? setRefreshing(true) : setLoading(true);
     const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('created_at', { ascending: false });
-    const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
+const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
+const otRes = await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: `SELECT object_id, tenant_id FROM object_tenants`, params: [] })
+});
+const otData = await otRes.json();
+setObjectTenants(otData.rows || []);
     const now = Date.now();
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ tens, objs }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ tens, objs, ot: otData.rows || [] }));
     localStorage.setItem(CACHE_TIME_KEY, String(now));
     setTenants(tens || []);
     setObjects(objs || []);
@@ -322,6 +331,11 @@ export default function Tenants({ onNavigate, highlightId }) {
   }
 
   const getObject = (id) => objects.find(o => o.id === id);
+// Получаем все объекты арендатора
+const getTenantObjects = (tenantId) => {
+  const ids = objectTenants.filter(ot => ot.tenant_id === tenantId).map(ot => ot.object_id);
+  return objects.filter(o => ids.includes(o.id));
+};
   const daysLeft = (date) => { if (!date) return null; return Math.ceil((new Date(date) - today) / (1000 * 60 * 60 * 24)); };
   const isJuridical = form.type === 'ЮРИД.ЛИЦО' || form.type === 'ИП';
   const isFiz = form.type === 'ФИЗ.ЛИЦО';
@@ -417,9 +431,22 @@ export default function Tenants({ onNavigate, highlightId }) {
                       ) : statusBadge(t)}
                     </td>
                     <td>{t.activity || '—'}</td>
-                    <td onClick={e => { e.stopPropagation(); if(obj) onNavigate('objects', obj.id); }}>
-                      {obj ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>{obj.name}</span> : <span style={{color:'#aaa'}}>—</span>}
-                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+  {(() => {
+    const tenantObjs = getTenantObjects(t.id);
+    if (tenantObjs.length === 0) return <span style={{color:'#aaa'}}>—</span>;
+    return (
+      <div style={{display:'flex', flexWrap:'wrap', gap:4}}>
+        {tenantObjs.map(o => (
+          <span key={o.id} style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline', whiteSpace:'nowrap'}}
+            onClick={() => onNavigate('objects', o.id)}>
+            {o.name}
+          </span>
+        ))}
+      </div>
+    );
+  })()}
+</td>
                     <td>{t.contract_end ? (
                       <span style={{color: days <= 30 ? '#A32D2D' : 'inherit'}}>
                         {new Date(t.contract_end).toLocaleDateString('ru-RU')}
@@ -478,14 +505,23 @@ export default function Tenants({ onNavigate, highlightId }) {
               {selected.name}
               <button className="modal-close" onClick={() => setSelected(null)}>✕ Закрыть</button>
             </div>
-            {getObject(selected.object_id) && (
-  <div className="detail-row"><div className="detail-key">Объект</div>
-    <div className="detail-val" style={{color:'#534AB7', cursor:'pointer'}}
-      onClick={() => { setSelected(null); onNavigate('objects', getObject(selected.object_id).id); }}>
-      → {getObject(selected.object_id).name}
+            {(() => {
+  const tenantObjs = getTenantObjects(selected.id);
+  if (tenantObjs.length === 0) return null;
+  return (
+    <div className="detail-row">
+      <div className="detail-key">Объект{tenantObjs.length > 1 ? 'ы' : ''}</div>
+      <div className="detail-val">
+        {tenantObjs.map(o => (
+          <div key={o.id} style={{color:'#534AB7', cursor:'pointer', marginBottom:2}}
+            onClick={() => { setSelected(null); onNavigate('objects', o.id); }}>
+            → {o.name}
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-)}
+  );
+})()}
 {tenantTotalRent > 0 && (
   <div className="detail-row"><div className="detail-key">💰 Итого</div>
     <div className="detail-val" style={{fontWeight:500, color:'#3B6D11'}}>{tenantTotalRent.toLocaleString('ru-RU')} ₽/мес</div>
