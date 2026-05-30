@@ -101,17 +101,7 @@ export default function AllDocuments({ onNavigate }) {
     } catch(e) {}
   }
 
-  {doc.items && (
-  <button
-    onClick={() => {
-      const items = typeof doc.items === 'string' ? JSON.parse(doc.items) : doc.items;
-      onNavigate('generation', null, { tenantId: doc.tenant_id, позиции: items });
-    }}
-    title="Открыть в Генерации"
-    style={{background:'#f0f0ff', color:'#534AB7', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4}}>
-    ✨
-  </button>
-)}
+  
 
   function handleSort(field) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -254,11 +244,17 @@ export default function AllDocuments({ onNavigate }) {
                         🔗
                       </a>
                     )}
-                    <button onClick={() => copyDoc(doc)} disabled={copyingId === doc.id}
-                      title="Копировать документ"
-                      style={{background:'#f0f0ff', color:'#534AB7', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4}}>
-                      {copyingId === doc.id ? '...' : '📋'}
-                    </button>
+                    {doc.items && (
+  <button
+    onClick={() => {
+      const items = typeof doc.items === 'string' ? JSON.parse(doc.items) : doc.items;
+      onNavigate('generation', null, { tenantId: doc.tenant_id, позиции: items });
+    }}
+    title="Открыть в Генерации"
+    style={{background:'#f0f0ff', color:'#534AB7', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4}}>
+    ✨
+  </button>
+)}
                     <button onClick={() => deleteDoc(doc.id)}
                       style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>
                       ✕
