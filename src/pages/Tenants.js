@@ -584,6 +584,10 @@ const getTenantObjects = (tenantId) => {
                 → Открыть контакты арендатора
               </div>
             </div>
+                  <div className="linked-section">
+  <div className="linked-title">💳 История оплат</div>
+  <TenantPayments tenantId={selected.id} />
+</div>
             <div className="form-actions">
               <button className="btn-cancel" onClick={() => deleteTenant(selected.id)}>В корзину</button>
               {selected.status !== 'Съехал' && (
