@@ -322,7 +322,7 @@ if (objList.length === 0 && tenant?.object_id) {
 }
 const общаяПлощадь = objList.reduce((sum, o) => sum + (parseFloat(o.area) || 0), 0);
 const общаяСтоимость = objList.reduce((sum, o) => sum + (parseFloat(o.rent) || 0) + (parseFloat(o.utility_cost) || 0), 0);
-const объектыСписок = objList.map(o => o.name).join(', ');
+const объектыСписок = objList.map(o => o.address || o.name).join(', ');
 const первыйОбъект = objList[0] || {};
       const tmpl = templates.find(t => t.path === selectedTemplate);
       if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
