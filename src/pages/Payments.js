@@ -18,8 +18,11 @@ export default function Payments({ onNavigate }) {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+const PAGE_SIZE = 15;
 
   useEffect(() => { fetchAll(); }, [year]);
+  useEffect(() => { setPage(1); }, [filterTenant, filterBuilding, filterStatus, year]);
 
   async function fetchAll() {
     setLoading(true);
@@ -68,16 +71,19 @@ export default function Payments({ onNavigate }) {
   }
 
   // Фильтрация строк
-  const filteredRows = rows.filter(row => {
-    if (filterTenant && row.tenant.id !== filterTenant) return false;
-    if (filterBuilding && row.building !== filterBuilding) return false;
-    if (filterStatus) {
-      const hasUnpaid = MONTHS.some((_, i) => !getPayment(row.tenant.id, i));
-      if (filterStatus === 'Есть долги' && !hasUnpaid) return false;
-      if (filterStatus === 'Все оплачено' && hasUnpaid) return false;
-    }
-    return true;
-  });
+ const filteredRows = rows.filter(row => {
+  if (filterTenant && row.tenant.id !== filterTenant) return false;
+  if (filterBuilding && row.building !== filterBuilding) return false;
+  if (filterStatus) {
+    const hasUnpaid = MONTHS.some((_, i) => !getPayment(row.tenant.id, i));
+    if (filterStatus === 'Есть долги' && !hasUnpaid) return false;
+    if (filterStatus === 'Все оплачено' && hasUnpaid) return false;
+  }
+  return true;
+});
+
+const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
+const paginatedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Статистика
   const totalExpected = payments.length > 0 ? payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0) : 0;
@@ -222,7 +228,8 @@ export default function Payments({ onNavigate }) {
 
       {/* РЕЖИМ 1 — Сводная таблица */}
       {mode === 'grid' && (
-        <div style={{overflowX:'auto'}}>
+  <>
+    <div style={{overflowX:'auto'}}>
           <table style={{minWidth:900}}>
             <thead>
               <tr>
@@ -236,7 +243,7 @@ export default function Payments({ onNavigate }) {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row, idx) => (
+              {paginatedRows.map((row, idx) => (
                 <tr key={`${row.tenant.id}_${row.object?.id || 'none'}_${idx}`}>
                   <td style={{fontWeight:500, fontSize:13, position:'sticky', left:0, background:'#fff', zIndex:1, cursor:'pointer', color:'#534AB7'}}
                     onClick={() => onNavigate('tenants', row.tenant.id)}>
@@ -282,6 +289,29 @@ export default function Payments({ onNavigate }) {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div style={{display:'flex', alignItems:'center', gap:8, marginTop:12, justifyContent:'center'}}>
+            <button onClick={() => setPage(1)} disabled={page === 1}
+              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>«</button>
+            <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>‹</button>
+            {Array.from({length: totalPages}, (_, i) => i+1).filter(p => Math.abs(p - page) <= 2).map(p => (
+              <button key={p} onClick={() => setPage(p)}
+                style={{background: p===page ? '#534AB7' : '#f4f4f8', color: p===page ? '#fff' : '#333',
+                  border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, fontWeight: p===page?600:400}}>
+                {p}
+              </button>
+            ))}
+            <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>›</button>
+            <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>»</button>
+          </div>
+        )}
+        <div style={{fontSize:11, color:'#aaa', textAlign:'center', marginTop:6}}>
+          Показано {((page-1)*PAGE_SIZE)+1}–{Math.min(page*PAGE_SIZE, filteredRows.length)} из {filteredRows.length} арендаторов
+        </div>
+      </>
       )}
 
       {/* РЕЖИМ 2 — Детальный список */}
