@@ -23,12 +23,12 @@ export default function Payments({ onNavigate }) {
 
   async function fetchAll() {
     setLoading(true);
-    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).eq('status', 'Активный').order('name');
+    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null);
     const otRes = await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT ot.*, t.name as tenant_name, o.name as object_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id JOIN objects o ON o.id = ot.object_id WHERE t.deleted_at IS NULL AND t.status = 'Активный'`, params: [] })
+      body: JSON.stringify({ query: `SELECT ot.*, t.name as tenant_name, o.name as object_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id JOIN objects o ON o.id = ot.object_id WHERE t.deleted_at IS NULL`, params: [] })
     });
     const otData = await otRes.json();
     const payRes = await fetch('/api/db', {
@@ -37,7 +37,7 @@ export default function Payments({ onNavigate }) {
       body: JSON.stringify({ query: `SELECT * FROM payments WHERE period_year = $1 ORDER BY payment_date DESC`, params: [year] })
     });
     const payData = await payRes.json();
-    setTenants(tens || []);
+    setTenants((tens || []).filter(t => t.status === 'Активный'));
     setObjects(objs || []);
     setObjectTenants(otData.rows || []);
     setPayments(payData.rows || []);
