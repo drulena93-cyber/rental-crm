@@ -518,7 +518,7 @@ async function deleteObj(id) {
                   <th style={thStyle} onClick={() => handleSort('name')}>Название{sortIcon('name')}</th>
                   <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
                   <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
-                  <th style={thStyle} onClick={() => handleSort('floor')}>Этаж{sortIcon('floor')}</th>
+                  <th style={thStyle} onClick={() => handleSort('office')}>№ оф/кв{sortIcon('office')}</th>
                   <th style={thStyle} onClick={() => handleSort('area')}>Площадь{sortIcon('area')}</th>
                   <th>Арендаторы</th>
                   <th style={thStyle} onClick={() => handleSort('rent')}>₽/мес{sortIcon('rent')}</th>
@@ -545,6 +545,7 @@ async function deleteObj(id) {
                         ) : statusBadge(o)}
                       </td>
                       <td>{o.floor || '—'}</td>
+                        <td>{o.office || '—'}</td>
                       <td>{o.area ? `${o.area} м²` : '—'}</td>
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{display:'flex', flexDirection:'column', gap:2}}>
@@ -764,6 +765,7 @@ async function deleteObj(id) {
             <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{selected.status}</div></div>
             <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{selected.type||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Этаж</div><div className="detail-val">{selected.floor||'—'}</div></div>
+        <div className="detail-row"><div className="detail-key">№ оф/кв</div><div className="detail-val">{selected.office||'—'}</div></div>
             <div className="detail-row"><div className="detail-key">Площадь</div><div className="detail-val">{selected.area ? `${selected.area} м²` : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">₽/мес</div><div className="detail-val">{selected.rent ? selected.rent.toLocaleString('ru-RU')+' ₽' : '—'}</div></div>
             <div className="detail-row"><div className="detail-key">Коммуналка</div><div className="detail-val">{selected.utility_cost ? selected.utility_cost.toLocaleString('ru-RU')+' ₽' : '—'} {selected.utility_type ? `(${selected.utility_type})` : ''}</div></div>
