@@ -94,6 +94,7 @@ export default function App() {
         {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
         {tab === 'generation' && <InvoiceGeneration onNavigate={handleNavigate} initialData={generationData} />}
         {tab === 'analytics' && <Analytics />}
+         {tab === 'payments' && <Payments onNavigate={handleNavigate} />}
         {tab === 'trash' && <Trash />}
         {tab === 'settings' && <Settings />}
       </div>
