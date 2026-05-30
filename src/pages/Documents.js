@@ -5,27 +5,66 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 
 function numberToWords(num) {
-  const n = parseInt(num);
-  if (!n) return '';
+  const n = Math.round(parseFloat(num));
+  if (!n) return 'ноль рублей 00 коп.';
+
   const ones = ['','один','два','три','четыре','пять','шесть','семь','восемь','девять',
     'десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать',
     'шестнадцать','семнадцать','восемнадцать','девятнадцать'];
   const tens = ['','','двадцать','тридцать','сорок','пятьдесят','шестьдесят','семьдесят','восемьдесят','девяносто'];
   const hundreds = ['','сто','двести','триста','четыреста','пятьсот','шестьсот','семьсот','восемьсот','девятьсот'];
-  const thousands = ['','одна тысяча','две тысячи','три тысячи','четыре тысячи',
-    'пять тысяч','шесть тысяч','семь тысяч','восемь тысяч','девять тысяч'];
-  if (n < 20) return ones[n] + ' рублей 00 коп.';
-  let result = '';
+
+  function thousands(n) {
+    if (n === 0) return '';
+    let result = '';
+    const h = Math.floor(n / 100);
+    const rest = n % 100;
+    const t = Math.floor(rest / 10);
+    const o = rest % 10;
+    if (h > 0) result += hundreds[h] + ' ';
+    if (rest >= 10 && rest < 20) {
+      // одиннадцать тысяч, двенадцать тысяч...
+      const onesF = ['десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать',
+        'шестнадцать','семнадцать','восемнадцать','девятнадцать'];
+      result += onesF[rest - 10] + ' ';
+      return result + 'тысяч ';
+    }
+    if (t > 1) result += tens[t] + ' ';
+    if (o === 1) result += 'одна тысяча ';
+    else if (o === 2) result += 'две тысячи ';
+    else if (o === 3) result += 'три тысячи ';
+    else if (o === 4) result += 'четыре тысячи ';
+    else if (o >= 5 || o === 0) {
+      if (t > 1 || o > 0) result += (o > 0 ? ones[o] + ' ' : '') + 'тысяч ';
+      else if (t === 0 && o === 0 && h > 0) result += 'тысяч ';
+    }
+    return result;
+  }
+
+  function hundreds3(n, femaleOnes) {
+    if (n === 0) return '';
+    let result = '';
+    const h = Math.floor(n / 100);
+    const rest = n % 100;
+    const t = Math.floor(rest / 10);
+    const o = rest % 10;
+    if (h > 0) result += hundreds[h] + ' ';
+    if (rest >= 10 && rest < 20) {
+      result += ones[rest] + ' ';
+      return result;
+    }
+    if (t > 1) result += tens[t] + ' ';
+    if (o > 0) result += (femaleOnes && o === 1 ? 'одна' : femaleOnes && o === 2 ? 'две' : ones[o]) + ' ';
+    return result;
+  }
+
   const th = Math.floor(n / 1000);
   const rem = n % 1000;
-  if (th > 0 && th < 10) result += thousands[th] + ' ';
-  else if (th >= 10) result += th + ' тысяч ';
-  const h = Math.floor(rem / 100);
-  const t = Math.floor((rem % 100) / 10);
-  const o = rem % 10;
-  if (h > 0) result += hundreds[h] + ' ';
-  if (t === 1) result += ones[10 + o] + ' ';
-  else { if (t > 1) result += tens[t] + ' '; if (o > 0) result += ones[o] + ' '; }
+
+  let result = '';
+  if (th > 0) result += thousands(th);
+  if (rem > 0) result += hundreds3(rem, false);
+
   return result.trim() + ' рублей 00 коп.';
 }
 
