@@ -8,6 +8,7 @@ import Settings from './pages/Settings';
 import AllDocuments from './pages/AllDocuments';
 import InvoiceGeneration from './pages/InvoiceGeneration';
 import Buildings from './pages/Buildings';
+import Payments from './pages/Payments';
 import './App.css';
 
 export default function App() {
@@ -79,6 +80,7 @@ export default function App() {
           <button className={tab === 'contacts' ? 'active' : ''} onClick={() => handleTabClick('contacts')}>Контакты</button>
           <button className={tab === 'documents' ? 'active' : ''} onClick={() => handleTabClick('documents')}>📄 Документы</button>
           <button className={tab === 'generation' ? 'active' : ''} onClick={() => handleTabClick('generation')}>✨ Генерация</button>
+            <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>
           <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>Аналитика</button>
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
