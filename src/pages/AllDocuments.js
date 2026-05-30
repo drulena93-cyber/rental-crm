@@ -22,7 +22,6 @@ export default function AllDocuments({ onNavigate }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [sortField, setSortField] = useState('created_at');
   const [sortDir, setSortDir] = useState('desc');
-  const [copyingId, setCopyingId] = useState(null);
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -102,23 +101,17 @@ export default function AllDocuments({ onNavigate }) {
     } catch(e) {}
   }
 
-  async function copyDoc(doc) {
-    if (!window.confirm(`Скопировать "${doc.name}"?`)) return;
-    setCopyingId(doc.id);
-    try {
-      const newName = doc.name + ' (копия)';
-      await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `INSERT INTO documents (tenant_id, name, type, file_path, file_size, yandex_path, description, amount, items) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          params: [doc.tenant_id, newName, doc.type, doc.file_path || '', doc.file_size, doc.yandex_path || '', doc.description, doc.amount, doc.items ? JSON.stringify(doc.items) : null]
-        })
-      });
-      fetchAll(true);
-    } catch(e) { alert('Ошибка копирования: ' + e.message); }
-    setCopyingId(null);
-  }
+  {doc.items && (
+  <button
+    onClick={() => {
+      const items = typeof doc.items === 'string' ? JSON.parse(doc.items) : doc.items;
+      onNavigate('generation', null, { tenantId: doc.tenant_id, позиции: items });
+    }}
+    title="Открыть в Генерации"
+    style={{background:'#f0f0ff', color:'#534AB7', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12, marginRight:4}}>
+    ✨
+  </button>
+)}
 
   function handleSort(field) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
