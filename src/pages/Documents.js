@@ -267,7 +267,24 @@ try {
     setGenerating(true);
     try {
       const org = organizations.find(o => o.id === selectedOrg);
-      const { data: objData } = await supabase.from('objects').select('*').eq('id', tenant?.object_id).single();
+      const objRes = await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: `SELECT o.* FROM objects o JOIN object_tenants ot ON ot.object_id = o.id WHERE ot.tenant_id = $1 AND o.deleted_at IS NULL`,
+    params: [tenantId]
+  })
+});
+const objResData = await objRes.json();
+const objList = objResData.rows || [];
+if (objList.length === 0 && tenant?.object_id) {
+  const { data: singleObj } = await supabase.from('objects').select('*').eq('id', tenant.object_id).single();
+  if (singleObj) objList.push(singleObj);
+}
+const общаяПлощадь = objList.reduce((sum, o) => sum + (parseFloat(o.area) || 0), 0);
+const общаяСтоимость = objList.reduce((sum, o) => sum + (parseFloat(o.rent) || 0) + (parseFloat(o.utility_cost) || 0), 0);
+const объектыСписок = objList.map(o => o.name).join(', ');
+const первыйОбъект = objList[0] || {};
       const tmpl = templates.find(t => t.path === selectedTemplate);
       if (!tmpl?.public_url) return alert('Нет публичной ссылки на шаблон');
       const dlRes = await fetch('/api/download-template', {
@@ -310,12 +327,16 @@ try {
         арендатор_кс: tenant?.corr_account || '',
         арендатор_паспорт: tenant?.passport || '',
         арендатор_прописка: tenant?.address || '',
-        объект_название: objData?.name || '',
-        объект_площадь: objData?.area || '',
-        объект_стоимость: objData?.rent ? objData.rent.toLocaleString('ru-RU') : '',
-        объект_стоимость_прописью: numberToWords(objData?.rent || 0),
-        объект_этаж: objData?.floor || '',
-        объект_адрес: objData?.address || '',
+        объект_название: первыйОбъект?.name || '',
+объект_площадь: первыйОбъект?.area || '',
+объект_стоимость: первыйОбъект?.rent ? parseFloat(первыйОбъект.rent).toLocaleString('ru-RU') : '',
+объект_стоимость_прописью: numberToWords(первыйОбъект?.rent || 0),
+объект_этаж: первыйОбъект?.floor || '',
+объект_адрес: первыйОбъект?.address || '',
+объекты_список: объектыСписок,
+общая_площадь: общаяПлощадь ? String(общаяПлощадь) : '',
+общая_стоимость: общаяСтоимость ? общаяСтоимость.toLocaleString('ru-RU') : '',
+общая_стоимость_прописью: numberToWords(общаяСтоимость),
         арендодатель_директор_краткий: org?.director_rod || org?.director || '',
         арендатор_директор_им: tenant?.director || tenant?.name || '',
       });
