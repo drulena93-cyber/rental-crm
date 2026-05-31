@@ -31,7 +31,7 @@ const PAGE_SIZE = 15;
     const otRes = await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT ot.*, t.name as tenant_name, o.name as object_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id JOIN objects o ON o.id = ot.object_id WHERE t.deleted_at IS NULL`, params: [] })
+      body: JSON.stringify({ query: `SELECT ot.*, t.name as tenant_name, o.name as object_name, o.type as object_type FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id JOIN objects o ON o.id = ot.object_id WHERE t.deleted_at IS NULL AND t.status = 'Активный'`, params: [] })
     });
     const otData = await otRes.json();
     const payRes = await fetch('/api/db', {
@@ -48,7 +48,7 @@ const PAGE_SIZE = 15;
   }
 
   // Получаем уникальные здания
-  const buildings = [...new Set(objects.map(o => o.type).filter(Boolean))].sort();
+  const buildings = [...new Set(objectTenants.map(ot => ot.object_type).filter(Boolean))].sort();
 
   // Получаем объекты арендатора
   const getTenantObjects = (tenantId) => objectTenants.filter(ot => ot.tenant_id === tenantId);
@@ -58,27 +58,30 @@ const PAGE_SIZE = 15;
 
   // Строки таблицы — один арендатор может иметь несколько объектов
   const rows = [];
-  for (const tenant of tenants) {
-    const tenantObjs = getTenantObjects(tenant.id);
-    if (tenantObjs.length === 0) {
-      rows.push({ tenant, object: null, building: null });
-    } else {
-      for (const ot of tenantObjs) {
-        const obj = objects.find(o => o.id === ot.object_id);
-        rows.push({ tenant, object: obj, building: obj?.type || null });
-      }
+for (const tenant of tenants) {
+  const tenantObjs = getTenantObjects(tenant.id);
+  if (tenantObjs.length === 0) {
+    rows.push({ tenant, object: null, building: null });
+  } else {
+    for (const ot of tenantObjs) {
+      const obj = objects.find(o => o.id === ot.object_id);
+      rows.push({ tenant, object: obj, building: ot.object_type || obj?.type || null });
     }
   }
+}
 
   // Фильтрация строк
  const filteredRows = rows.filter(row => {
   if (filterTenant && row.tenant.id !== filterTenant) return false;
   if (filterBuilding && row.building !== filterBuilding) return false;
   if (filterStatus) {
-    const hasUnpaid = MONTHS.some((_, i) => !getPayment(row.tenant.id, i));
-    if (filterStatus === 'Есть долги' && !hasUnpaid) return false;
-    if (filterStatus === 'Все оплачено' && hasUnpaid) return false;
-  }
+  const tenantPayments = payments.filter(p => p.tenant_id === row.tenant.id);
+  const hasAnyPayment = tenantPayments.length > 0;
+  const hasUnpaid = tenantPayments.some(p => p.status !== 'Оплачено');
+  const allPaid = hasAnyPayment && !hasUnpaid;
+  if (filterStatus === 'Есть долги' && allPaid) return false;
+  if (filterStatus === 'Все оплачено' && !allPaid) return false;
+}
   return true;
 });
 
