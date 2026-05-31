@@ -31,7 +31,7 @@ const PAGE_SIZE = 15;
     const otRes = await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT ot.*, t.name as tenant_name, o.name as object_name, o.type as object_type FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id JOIN objects o ON o.id = ot.object_id WHERE t.deleted_at IS NULL AND t.status = 'Активный'`, params: [] })
+      body: JSON.stringify({ query: `SELECT ot.tenant_id, SUM(COALESCE(o.rent,0) + COALESCE(o.utility_cost,0)) as total_rent, STRING_AGG(o.type, ',') as object_types FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id JOIN objects o ON o.id = ot.object_id WHERE t.deleted_at IS NULL AND t.status = 'Активный' GROUP BY ot.tenant_id`, params: [] })
     });
     const otData = await otRes.json();
     const payRes = await fetch('/api/db', {
@@ -48,32 +48,37 @@ const PAGE_SIZE = 15;
   }
 
   // Получаем уникальные здания
-  const buildings = [...new Set(objectTenants.map(ot => ot.object_type).filter(Boolean))].sort();
+  const buildings = [...new Set(objectTenants.flatMap(ot => (ot.object_types || '').split(',').filter(Boolean)))].sort();
 
   // Получаем объекты арендатора
   const getTenantObjects = (tenantId) => objectTenants.filter(ot => ot.tenant_id === tenantId);
+  const getTenantRent = (tenantId) => {
+  const row = objectTenants.find(ot => ot.tenant_id === tenantId);
+  return parseFloat(row?.total_rent || 0);
+};
+const getTenantBuilding = (tenantId) => {
+  const row = objectTenants.find(ot => ot.tenant_id === tenantId);
+  return row?.object_types?.split(',')[0] || null;
+};
 
   // Получаем оплату для арендатора за месяц
   const getPayment = (tenantId, month) => payments.find(p => p.tenant_id === tenantId && p.period_month === month + 1 && p.period_year === year);
 
   // Строки таблицы — один арендатор может иметь несколько объектов
-  const rows = [];
-for (const tenant of tenants) {
-  const tenantObjs = getTenantObjects(tenant.id);
-  if (tenantObjs.length === 0) {
-    rows.push({ tenant, object: null, building: null });
-  } else {
-    for (const ot of tenantObjs) {
-      const obj = objects.find(o => o.id === ot.object_id);
-      rows.push({ tenant, object: obj, building: ot.object_type || obj?.type || null });
-    }
-  }
+  const rows = tenants.map(tenant => ({
+  tenant,
+  building: getTenantBuilding(tenant.id),
+  rent: getTenantRent(tenant.id),
+}));
 }
 
   // Фильтрация строк
  const filteredRows = rows.filter(row => {
   if (filterTenant && row.tenant.id !== filterTenant) return false;
-  if (filterBuilding && row.building !== filterBuilding) return false;
+  if (filterBuilding) {
+  const types = objectTenants.find(ot => ot.tenant_id === row.tenant.id)?.object_types?.split(',') || [];
+  if (!types.includes(filterBuilding)) return false;
+}
   if (filterStatus) {
   const tenantPayments = payments.filter(p => p.tenant_id === row.tenant.id);
   const hasAnyPayment = tenantPayments.length > 0;
@@ -236,7 +241,7 @@ const paginatedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZ
           <table style={{minWidth:900}}>
             <thead>
               <tr>
-                <th style={{minWidth:180, position:'sticky', left:0, background:'#f4f4f8', zIndex:1}}>Арендатор</th>
+                <th style={{minWidth:220, position:'sticky', left:0, background:'#f4f4f8', zIndex:1}}>Арендатор</th>
                 <th style={{minWidth:140, position:'sticky', left:180, background:'#f4f4f8', zIndex:1}}>Объект</th>
                 {MONTHS.map((m, i) => (
                   <th key={i} style={{textAlign:'center', minWidth:60, fontWeight: i === new Date().getMonth() ? 700 : 500, color: i === new Date().getMonth() ? '#534AB7' : 'inherit'}}>
@@ -248,10 +253,16 @@ const paginatedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZ
             <tbody>
               {paginatedRows.map((row, idx) => (
                 <tr key={`${row.tenant.id}_${row.object?.id || 'none'}_${idx}`}>
-                  <td style={{fontWeight:500, fontSize:13, position:'sticky', left:0, background:'#fff', zIndex:1, cursor:'pointer', color:'#534AB7'}}
-                    onClick={() => onNavigate('tenants', row.tenant.id)}>
-                    {row.tenant.name}
-                  </td>
+                  <td style={{fontWeight:500, fontSize:13, position:'sticky', left:0, background:'#fff', zIndex:1, cursor:'pointer'}}>
+  <span style={{color:'#534AB7'}} onClick={() => onNavigate('tenants', row.tenant.id)}>
+    {row.tenant.name}
+  </span>
+  {row.rent > 0 && (
+    <div style={{fontSize:10, color:'#3B6D11', fontWeight:400}}>
+      {row.rent.toLocaleString('ru-RU')} ₽/мес
+    </div>
+  )}
+</td>
                   <td style={{fontSize:12, color:'#888', position:'sticky', left:180, background:'#fff', zIndex:1}}>
                     {row.object?.name || '—'}
                   </td>
