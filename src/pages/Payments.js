@@ -241,7 +241,6 @@ const paginatedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZ
             <thead>
               <tr>
                 <th style={{minWidth:220, position:'sticky', left:0, background:'#f4f4f8', zIndex:1}}>Арендатор</th>
-                <th style={{minWidth:140, position:'sticky', left:180, background:'#f4f4f8', zIndex:1}}>Объект</th>
                 {MONTHS.map((m, i) => (
                   <th key={i} style={{textAlign:'center', minWidth:60, fontWeight: i === new Date().getMonth() ? 700 : 500, color: i === new Date().getMonth() ? '#534AB7' : 'inherit'}}>
                     {m}
@@ -262,9 +261,7 @@ const paginatedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZ
     </div>
   )}
 </td>
-                  <td style={{fontSize:12, color:'#888', position:'sticky', left:180, background:'#fff', zIndex:1}}>
-                    {row.object?.name || '—'}
-                  </td>
+                  
                   {MONTHS.map((_, monthIdx) => {
                     const payment = getPayment(row.tenant.id, monthIdx);
                     const cell = cellColor(payment);
