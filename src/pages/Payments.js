@@ -70,7 +70,6 @@ const getTenantBuilding = (tenantId) => {
   building: getTenantBuilding(tenant.id),
   rent: getTenantRent(tenant.id),
 }));
-}
 
   // Фильтрация строк
  const filteredRows = rows.filter(row => {
