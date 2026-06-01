@@ -20,15 +20,15 @@ export default function Buildings({ onNavigate }) {
   const [filterAreaMax, setFilterAreaMax] = useState('');
   const [filterRentMin, setFilterRentMin] = useState('');
   const [filterRentMax, setFilterRentMax] = useState('');
+  const [buildingNames2, setBuildingNames2] = useState({});
+  const [editingBuilding, setEditingBuilding] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
 
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
     const res = await fetch('/api/db', {
-      const [buildingNames2, setBuildingNames2] = useState({});
-const [editingBuilding, setEditingBuilding] = useState(null);
-const [editingValue, setEditingValue] = useState('');
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -43,33 +43,35 @@ const [editingValue, setEditingValue] = useState('');
     });
     const data = await res.json();
     setObjects(data.rows || []);
-  const bldRes = await fetch('/api/db', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ query: `SELECT * FROM buildings ORDER BY display_name`, params: [] })
-});
-const bldData = await bldRes.json();
-const bldMap = {};
-for (const b of bldData.rows || []) bldMap[b.type] = b;
-setBuildingNames2(bldMap);
-setLoading(false);
+
+    const bldRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT * FROM buildings ORDER BY display_name`, params: [] })
+    });
+    const bldData = await bldRes.json();
+    const bldMap = {};
+    for (const b of bldData.rows || []) bldMap[b.type] = b;
+    setBuildingNames2(bldMap);
     setLoading(false);
   }
-async function saveBuilding(type, displayName) {
-  await fetch('/api/db', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: `UPDATE buildings SET display_name = $1 WHERE type = $2`,
-      params: [displayName, type]
-    })
-  });
-  setBuildingNames2(prev => ({
-    ...prev,
-    [type]: { ...prev[type], display_name: displayName }
-  }));
-  setEditingBuilding(null);
-}
+
+  async function saveBuilding(type, displayName) {
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `UPDATE buildings SET display_name = $1 WHERE type = $2`,
+        params: [displayName, type]
+      })
+    });
+    setBuildingNames2(prev => ({
+      ...prev,
+      [type]: { ...prev[type], display_name: displayName }
+    }));
+    setEditingBuilding(null);
+  }
+
   const buildings = {};
   for (const obj of objects) {
     if (!buildings[obj.type]) buildings[obj.type] = [];
@@ -142,7 +144,6 @@ async function saveBuilding(type, displayName) {
 
   return (
     <div>
-      {/* Метрики */}
       <div className="stats" style={{marginBottom:16}}>
         <div className="stat"><div className="stat-label">Всего помещений</div><div className="stat-val purple">{allStats.всего}</div></div>
         <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{allStats.сдано}</div></div>
@@ -151,7 +152,6 @@ async function saveBuilding(type, displayName) {
         <div className="stat"><div className="stat-label">Аренда / Коммуналка</div><div className="stat-val" style={{fontSize:12}}>{allStats.аренда.toLocaleString('ru-RU')} / {allStats.коммуналка.toLocaleString('ru-RU')} ₽</div></div>
       </div>
 
-      {/* Фильтры */}
       <div style={{display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center'}}>
         <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setSelectedBuilding(null); }}
           style={{padding:'6px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
@@ -185,7 +185,6 @@ async function saveBuilding(type, displayName) {
         )}
       </div>
 
-      {/* Легенда */}
       <div style={{display:'flex', gap:16, marginBottom:12}}>
         {Object.entries(STATUS_COLORS).filter(([k]) => k !== 'default').map(([status, style]) => (
           <div key={status} style={{display:'flex', alignItems:'center', gap:6, fontSize:12}}>
@@ -195,10 +194,7 @@ async function saveBuilding(type, displayName) {
         ))}
       </div>
 
-      {/* Основной layout */}
       <div style={{display:'grid', gridTemplateColumns: selectedBuilding ? '1fr 420px' : '1fr', gap:16, alignItems:'start'}}>
-
-        {/* Таблица зданий */}
         <div style={{overflowX:'auto'}}>
           <table>
             <thead>
@@ -226,30 +222,29 @@ async function saveBuilding(type, displayName) {
                     onClick={() => setSelectedBuilding(isSelected ? null : name)}
                     style={{cursor:'pointer', background: isSelected ? '#f0f0ff' : 'inherit'}}>
                     <td style={{fontWeight:500}}>
-  {editingBuilding === name ? (
-    <div style={{display:'flex', gap:6, alignItems:'center'}}>
-      <input autoFocus value={editingValue}
-        onChange={e => setEditingValue(e.target.value)}
-        onKeyDown={e => { if(e.key==='Enter') saveBuilding(name, editingValue); if(e.key==='Escape') setEditingBuilding(null); }}
-        style={{padding:'4px 8px', borderRadius:6, border:'1px solid #534AB7', fontSize:13, width:160}} />
-      <button onClick={() => saveBuilding(name, editingValue)}
-        style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>✓</button>
-      <button onClick={() => setEditingBuilding(null)}
-        style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:14}}>✕</button>
-    </div>
-  ) : (
-    <div style={{display:'flex', alignItems:'center', gap:8}}>
-      <span style={{color:'#534AB7', cursor:'pointer'}}
-        onClick={() => setSelectedBuilding(name === selectedBuilding ? null : name)}>
-        {buildingNames2[name]?.display_name || name}
-      </span>
-      <button onClick={e => { e.stopPropagation(); setEditingBuilding(name); setEditingValue(buildingNames2[name]?.display_name || name); }}
-        style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:12, padding:'2px 4px'}}>
-        ✎
-      </button>
-    </div>
-  )}
-</td>
+                      {editingBuilding === name ? (
+                        <div style={{display:'flex', gap:6, alignItems:'center'}} onClick={e => e.stopPropagation()}>
+                          <input autoFocus value={editingValue}
+                            onChange={e => setEditingValue(e.target.value)}
+                            onKeyDown={e => { if(e.key==='Enter') saveBuilding(name, editingValue); if(e.key==='Escape') setEditingBuilding(null); }}
+                            style={{padding:'4px 8px', borderRadius:6, border:'1px solid #534AB7', fontSize:13, width:160}} />
+                          <button onClick={() => saveBuilding(name, editingValue)}
+                            style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>✓</button>
+                          <button onClick={() => setEditingBuilding(null)}
+                            style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:14}}>✕</button>
+                        </div>
+                      ) : (
+                        <div style={{display:'flex', alignItems:'center', gap:8}}>
+                          <span style={{color:'#534AB7'}}>
+                            {buildingNames2[name]?.display_name || name}
+                          </span>
+                          <button onClick={e => { e.stopPropagation(); setEditingBuilding(name); setEditingValue(buildingNames2[name]?.display_name || name); }}
+                            style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:12, padding:'2px 4px'}}>
+                            ✎
+                          </button>
+                        </div>
+                      )}
+                    </td>
                     <td style={{textAlign:'center'}}>{s.этажей || '—'}</td>
                     <td style={{textAlign:'center'}}>{s.всего}</td>
                     <td style={{textAlign:'center', color:'#3B6D11', fontWeight:500}}>{s.сдано}</td>
@@ -273,21 +268,17 @@ async function saveBuilding(type, displayName) {
           </table>
         </div>
 
-        {/* Панель шахматки справа */}
         {selectedBuilding && (
           <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, position:'sticky', top:16, maxHeight:'80vh', overflowY:'auto'}}>
-            
-            {/* Заголовок */}
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
               <div style={{fontWeight:700, fontSize:14, color:'#534AB7'}}>
-  🏢 {buildingNames2[selectedBuilding]?.display_name || selectedBuilding}
-  <div style={{fontSize:11, color:'#aaa', fontWeight:400}}>{selectedBuilding}</div>
-</div>
+                🏢 {buildingNames2[selectedBuilding]?.display_name || selectedBuilding}
+                <div style={{fontSize:11, color:'#aaa', fontWeight:400}}>{selectedBuilding}</div>
+              </div>
               <button onClick={() => setSelectedBuilding(null)}
                 style={{background:'none', border:'none', cursor:'pointer', color:'#aaa', fontSize:16}}>✕</button>
             </div>
 
-            {/* Краткая статистика в одну строку */}
             {(() => {
               const s = getBuildingStats(buildings[selectedBuilding]);
               const pct = s.всего > 0 ? Math.round((s.сдано / s.всего) * 100) : 0;
@@ -303,7 +294,6 @@ async function saveBuilding(type, displayName) {
               );
             })()}
 
-            {/* Шахматка */}
             {(() => {
               const objs = buildings[selectedBuilding];
               const floors = getFloors(objs);
@@ -312,14 +302,11 @@ async function saveBuilding(type, displayName) {
                 .map(Number)
                 .sort((a, b) => b - a);
               const otherObjs = floors['other'] || [];
-
               return (
                 <>
                   {floorKeys.map(floor => (
                     <div key={floor} style={{marginBottom:12}}>
-                      <div style={{fontSize:11, fontWeight:600, color:'#aaa', marginBottom:6, letterSpacing:1}}>
-                        ЭТАЖ {floor}
-                      </div>
+                      <div style={{fontSize:11, fontWeight:600, color:'#aaa', marginBottom:6, letterSpacing:1}}>ЭТАЖ {floor}</div>
                       <div style={{display:'flex', flexWrap:'wrap', gap:4}}>
                         {floors[floor].map(obj => {
                           const st = getStatusStyle(obj.status);
@@ -328,37 +315,19 @@ async function saveBuilding(type, displayName) {
                             <div key={obj.id}
                               onClick={() => { setSelectedBuilding(null); onNavigate('objects', obj.id); }}
                               title={`${obj.name}\n${obj.tenant_name ? obj.tenant_name : 'Свободно'}\n${obj.area ? obj.area + ' м²' : ''}`}
-                              style={{
-                                background: st.bg,
-                                color: st.color,
-                                border: `1px solid ${st.color}`,
-                                borderRadius: 6,
-                                padding: '5px 7px',
-                                fontSize: 10,
-                                cursor: 'pointer',
-                                minWidth: 52,
-                                maxWidth: 90,
-                                textAlign: 'center',
-                              }}>
+                              style={{background:st.bg, color:st.color, border:`1px solid ${st.color}`, borderRadius:6, padding:'5px 7px', fontSize:10, cursor:'pointer', minWidth:52, maxWidth:90, textAlign:'center'}}>
                               <div style={{fontWeight:700, fontSize:11}}>{label}</div>
                               {obj.area && <div style={{opacity:0.7}}>{obj.area}м²</div>}
-                              {obj.tenant_name && (
-                                <div style={{opacity:0.85, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:9}}>
-                                  {obj.tenant_name.split(' ').slice(0,2).join(' ')}
-                                </div>
-                              )}
+                              {obj.tenant_name && <div style={{opacity:0.85, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:9}}>{obj.tenant_name.split(' ').slice(0,2).join(' ')}</div>}
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   ))}
-
                   {otherObjs.length > 0 && (
                     <div>
-                      <div style={{fontSize:11, fontWeight:600, color:'#aaa', marginBottom:6, letterSpacing:1}}>
-                        ОБЩИЕ / ДРУГИЕ
-                      </div>
+                      <div style={{fontSize:11, fontWeight:600, color:'#aaa', marginBottom:6, letterSpacing:1}}>ОБЩИЕ / ДРУГИЕ</div>
                       <div style={{display:'flex', flexWrap:'wrap', gap:4}}>
                         {otherObjs.map(obj => {
                           const st = getStatusStyle(obj.status);
@@ -367,24 +336,9 @@ async function saveBuilding(type, displayName) {
                             <div key={obj.id}
                               onClick={() => { setSelectedBuilding(null); onNavigate('objects', obj.id); }}
                               title={`${obj.name}\n${obj.tenant_name ? obj.tenant_name : 'Свободно'}`}
-                              style={{
-                                background: st.bg,
-                                color: st.color,
-                                border: `1px solid ${st.color}`,
-                                borderRadius: 6,
-                                padding: '5px 7px',
-                                fontSize: 10,
-                                cursor: 'pointer',
-                                minWidth: 52,
-                                maxWidth: 90,
-                                textAlign: 'center',
-                              }}>
+                              style={{background:st.bg, color:st.color, border:`1px solid ${st.color}`, borderRadius:6, padding:'5px 7px', fontSize:10, cursor:'pointer', minWidth:52, maxWidth:90, textAlign:'center'}}>
                               <div style={{fontWeight:700, fontSize:11}}>{label}</div>
-                              {obj.tenant_name && (
-                                <div style={{opacity:0.85, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:9}}>
-                                  {obj.tenant_name.split(' ').slice(0,2).join(' ')}
-                                </div>
-                              )}
+                              {obj.tenant_name && <div style={{opacity:0.85, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:9}}>{obj.tenant_name.split(' ').slice(0,2).join(' ')}</div>}
                             </div>
                           );
                         })}
