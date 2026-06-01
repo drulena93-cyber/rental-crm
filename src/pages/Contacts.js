@@ -41,9 +41,11 @@ const [objectTenants, setObjectTenants] = useState([]);
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
         try {
-          const { cons, tens } = JSON.parse(cached);
-          setContacts(cons || []);
-          setTenants(tens || []);
+          const { cons, tens, objs, ot } = JSON.parse(cached);
+setContacts(cons || []);
+setTenants(tens || []);
+setObjects(objs || []);
+setObjectTenants(ot || []);
           setLastUpdated(new Date(parseInt(cachedTime)));
           setLoading(false);
           return;
@@ -66,7 +68,7 @@ setObjects(objs || []);
 setObjectTenants(otData.rows || []);
 
     const now = Date.now();
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ cons, tens }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ cons, tens, objs, ot: otData.rows || [] }));
 setObjects(objs || []);
 setObjectTenants(otData.rows || []);
     localStorage.setItem(CACHE_TIME_KEY, String(now));
