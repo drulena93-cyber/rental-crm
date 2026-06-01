@@ -16,6 +16,7 @@ export default function Settings() {
   const [defaultActTemplate, setDefaultActTemplate] = useState('');
   const [defaultContractTemplate, setDefaultContractTemplate] = useState('');
   const [savingDefaults, setSavingDefaults] = useState(false);
+  const [showPaymentsTab, setShowPaymentsTab] = useState(false);
   const fileRef = useRef();
 
   useEffect(() => { fetchAll(); }, []);
@@ -53,13 +54,14 @@ export default function Settings() {
     const res = await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT id, value FROM settings WHERE id IN ('default_invoice_template', 'default_act_template', 'default_contract_template')`, params: [] })
+      body: JSON.stringify({ query: `SELECT id, value FROM settings WHERE id IN ('default_invoice_template', 'default_act_template', 'default_contract_template', 'show_payments_tab')`, params: [] })
     });
     const data = await res.json();
     const rows = data.rows || [];
     setDefaultInvoiceTemplate(rows.find(r => r.id === 'default_invoice_template')?.value || '');
     setDefaultActTemplate(rows.find(r => r.id === 'default_act_template')?.value || '');
     setDefaultContractTemplate(rows.find(r => r.id === 'default_contract_template')?.value || '');
+    setShowPaymentsTab(rows.find(r => r.id === 'show_payments_tab')?.value === 'true');
   }
 
   async function fetchItemTemplates() {
@@ -77,7 +79,7 @@ export default function Settings() {
     await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `INSERT INTO settings (id, value) VALUES ('default_invoice_template', $1), ('default_act_template', $2), ('default_contract_template', $3) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`, params: [defaultInvoiceTemplate, defaultActTemplate, defaultContractTemplate] })
+      body: JSON.stringify({ query: `INSERT INTO settings (id, value) VALUES ('default_invoice_template', $1), ('default_act_template', $2), ('default_contract_template', $3), ('show_payments_tab', $4) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`, params: [defaultInvoiceTemplate, defaultActTemplate, defaultContractTemplate, String(showPaymentsTab)] })
     });
     setSavingDefaults(false);
     alert('Шаблоны по умолчанию сохранены!');
@@ -262,9 +264,15 @@ export default function Settings() {
             </select>
           </div>
         </div>
-        <button className="btn-save" onClick={saveDefaults} disabled={savingDefaults}>
-          {savingDefaults ? 'Сохраняется...' : '💾 Сохранить'}
-        </button>
+        <div className="form-group" style={{marginBottom:12}}>
+  <label style={{display:'flex', alignItems:'center', gap:10, cursor:'pointer'}}>
+    <input type="checkbox" checked={showPaymentsTab} onChange={e => setShowPaymentsTab(e.target.checked)} />
+    <span>Показывать страницу 💳 Оплаты в навигации</span>
+  </label>
+</div>
+<button className="btn-save" onClick={saveDefaults} disabled={savingDefaults}>
+  {savingDefaults ? 'Сохраняется...' : '💾 Сохранить'}
+</button>
       </div>
 
       {/* Шаблоны позиций */}
