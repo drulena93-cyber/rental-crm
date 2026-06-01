@@ -536,7 +536,7 @@ const getTenantObjects = (tenantId) => {
   fontWeight: t.in_invoice ? 500 : 400,
   whiteSpace: 'nowrap',
   lineHeight: '1.2',
-}}
+}}>
     {t.in_invoice ? '✅ Да' : '—'}
   </button>
 </td>
