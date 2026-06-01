@@ -518,6 +518,7 @@ async function deleteObj(id) {
                   <th style={thStyle} onClick={() => handleSort('name')}>Название{sortIcon('name')}</th>
                   <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
                   <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
+        <th style={thStyle} onClick={() => handleSort('floor')}>Этаж{sortIcon('floor')}</th>
                   <th style={thStyle} onClick={() => handleSort('office')}>№ оф/кв{sortIcon('office')}</th>
                   <th style={thStyle} onClick={() => handleSort('area')}>Площадь{sortIcon('area')}</th>
                   <th>Арендаторы</th>
