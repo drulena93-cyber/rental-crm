@@ -17,6 +17,9 @@ export default function Contacts({ tenantId, onNavigate }) {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(() => parseInt(localStorage.getItem('contacts_page') || '1'));
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [filterObjectType, setFilterObjectType] = useState('');
+const [objects, setObjects] = useState([]);
+const [objectTenants, setObjectTenants] = useState([]);
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -29,8 +32,8 @@ export default function Contacts({ tenantId, onNavigate }) {
   }, [page]);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, selectedTenant]);
+  setPage(1);
+}, [search, selectedTenant, filterObjectType]);
 
   async function fetchAll(forceRefresh = false) {
     if (!forceRefresh) {
@@ -51,10 +54,21 @@ export default function Contacts({ tenantId, onNavigate }) {
     forceRefresh ? setRefreshing(true) : setLoading(true);
 
     const { data: cons } = await supabase.from('contacts').select('*').is('deleted_at', null).order('full_name');
-    const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
+const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
+const { data: objs } = await supabase.from('objects').select('id, name, type').is('deleted_at', null);
+const otRes = await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: `SELECT object_id, tenant_id FROM object_tenants`, params: [] })
+});
+const otData = await otRes.json();
+setObjects(objs || []);
+setObjectTenants(otData.rows || []);
 
     const now = Date.now();
     localStorage.setItem(CACHE_KEY, JSON.stringify({ cons, tens }));
+setObjects(objs || []);
+setObjectTenants(otData.rows || []);
     localStorage.setItem(CACHE_TIME_KEY, String(now));
 
     setContacts(cons || []);
@@ -64,12 +78,25 @@ export default function Contacts({ tenantId, onNavigate }) {
     setRefreshing(false);
   }
 
-  const filtered = contacts.filter(c => {
-    if (selectedTenant && c.tenant_id !== selectedTenant) return false;
-    if (search && !c.full_name?.toLowerCase().includes(search.toLowerCase()) &&
-        !c.phone?.toLowerCase().includes(search.toLowerCase()) && !c.email?.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const objectTypesByTenant = {};
+for (const ot of objectTenants) {
+  const obj = objects.find(o => o.id === ot.object_id);
+  if (obj?.type) {
+    if (!objectTypesByTenant[ot.tenant_id]) objectTypesByTenant[ot.tenant_id] = new Set();
+    objectTypesByTenant[ot.tenant_id].add(obj.type);
+  }
+}
+
+const filtered = contacts.filter(c => {
+  if (selectedTenant && c.tenant_id !== selectedTenant) return false;
+  if (filterObjectType) {
+    const types = objectTypesByTenant[c.tenant_id];
+    if (!types || !types.has(filterObjectType)) return false;
+  }
+  if (search && !c.full_name?.toLowerCase().includes(search.toLowerCase()) &&
+      !c.phone?.toLowerCase().includes(search.toLowerCase()) && !c.email?.toLowerCase().includes(search.toLowerCase())) return false;
+  return true;
+});
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -118,6 +145,12 @@ export default function Contacts({ tenantId, onNavigate }) {
           <option value="">Все арендаторы</option>
           {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+  <select value={filterObjectType} onChange={e => setFilterObjectType(e.target.value)}>
+  <option value="">Все типы объектов</option>
+  {[...new Set(objects.map(o => o.type).filter(Boolean))].sort().map(type => (
+    <option key={type} value={type}>{type}</option>
+  ))}
+</select>
         {selectedTenant && (
           <button className="btn-cancel" style={{padding:'6px 12px', fontSize:13}} onClick={() => { onNavigate('tenants', selectedTenant); }}>
             ← К арендатору
