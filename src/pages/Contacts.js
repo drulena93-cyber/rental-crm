@@ -64,20 +64,19 @@ const otRes = await fetch('/api/db', {
   body: JSON.stringify({ query: `SELECT object_id, tenant_id FROM object_tenants`, params: [] })
 });
 const otData = await otRes.json();
-setObjects(objs || []);
-setObjectTenants(otData.rows || []);
 
-    const now = Date.now();
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ cons, tens, objs, ot: otData.rows || [] }));
-setObjects(objs || []);
-setObjectTenants(otData.rows || []);
-    localStorage.setItem(CACHE_TIME_KEY, String(now));
 
-    setContacts(cons || []);
-    setTenants(tens || []);
-    setLastUpdated(new Date(now));
-    setLoading(false);
-    setRefreshing(false);
+  const now = Date.now();
+const otRows = otData.rows || [];
+localStorage.setItem(CACHE_KEY, JSON.stringify({ cons: cons || [], tens: tens || [], objs: objs || [], ot: otRows }));
+localStorage.setItem(CACHE_TIME_KEY, String(now));
+setContacts(cons || []);
+setTenants(tens || []);
+setObjects(objs || []);
+setObjectTenants(otRows);
+setLastUpdated(new Date(now));
+setLoading(false);
+setRefreshing(false);  
   }
 
   const objectTypesByTenant = {};
