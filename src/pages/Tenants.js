@@ -526,16 +526,17 @@ const getTenantObjects = (tenantId) => {
       } catch(err) {}
     }}
     style={{
-      background: t.in_invoice ? '#EAF3DE' : '#f4f4f8',
-      color: t.in_invoice ? '#3B6D11' : '#aaa',
-      border: `1px solid ${t.in_invoice ? '#3B6D11' : '#ddd'}`,
-      borderRadius: 6,
-      padding: '3px 10px',
-      fontSize: 12,
-      cursor: 'pointer',
-      fontWeight: t.in_invoice ? 500 : 400,
-      minWidth: 50,
-    }}>
+  background: t.in_invoice ? '#EAF3DE' : '#f4f4f8',
+  color: t.in_invoice ? '#3B6D11' : '#aaa',
+  border: `1px solid ${t.in_invoice ? '#3B6D11' : '#ddd'}`,
+  borderRadius: 6,
+  padding: '2px 6px',
+  fontSize: 11,
+  cursor: 'pointer',
+  fontWeight: t.in_invoice ? 500 : 400,
+  whiteSpace: 'nowrap',
+  lineHeight: '1.2',
+}}
     {t.in_invoice ? '✅ Да' : '—'}
   </button>
 </td>
