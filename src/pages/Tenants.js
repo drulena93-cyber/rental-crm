@@ -510,12 +510,22 @@ const getTenantObjects = (tenantId) => {
                       </span>
                     ) : '—'}</td>
                     <td onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={t.in_invoice || false}
-                        onChange={async e => {
-                          await supabase.from('tenants').update({ in_invoice: e.target.checked }).eq('id', t.id);
-                          setTenants(tenants.map(ten => ten.id === t.id ? { ...ten, in_invoice: e.target.checked } : ten));
-                        }} />
-                    </td>
+  <input type="checkbox" checked={t.in_invoice || false}
+    onClick={e => e.stopPropagation()}
+    onChange={async e => {
+      e.stopPropagation();
+      await supabase.from('tenants').update({ in_invoice: e.target.checked }).eq('id', t.id);
+      setTenants(prev => prev.map(ten => ten.id === t.id ? { ...ten, in_invoice: e.target.checked } : ten));
+      try {
+        const cached = localStorage.getItem('tenants_cache');
+        if (cached) {
+          const d = JSON.parse(cached);
+          d.tens = d.tens.map(ten => ten.id === t.id ? { ...ten, in_invoice: e.target.checked } : ten);
+          localStorage.setItem('tenants_cache', JSON.stringify(d));
+        }
+      } catch(err) {}
+    }} />
+</td>
                     <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{t.updated_at ? new Date(t.updated_at).toLocaleDateString('ru-RU') : '—'}</td>
                     <td onClick={e => { e.stopPropagation(); onNavigate('contacts', t.id); }}>
                       <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}>Контакты →</span>
