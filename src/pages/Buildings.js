@@ -26,6 +26,9 @@ export default function Buildings({ onNavigate }) {
   async function fetchAll() {
     setLoading(true);
     const res = await fetch('/api/db', {
+      const [buildingNames2, setBuildingNames2] = useState({});
+const [editingBuilding, setEditingBuilding] = useState(null);
+const [editingValue, setEditingValue] = useState('');
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -40,9 +43,33 @@ export default function Buildings({ onNavigate }) {
     });
     const data = await res.json();
     setObjects(data.rows || []);
+  const bldRes = await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: `SELECT * FROM buildings ORDER BY display_name`, params: [] })
+});
+const bldData = await bldRes.json();
+const bldMap = {};
+for (const b of bldData.rows || []) bldMap[b.type] = b;
+setBuildingNames2(bldMap);
+setLoading(false);
     setLoading(false);
   }
-
+async function saveBuilding(type, displayName) {
+  await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: `UPDATE buildings SET display_name = $1 WHERE type = $2`,
+      params: [displayName, type]
+    })
+  });
+  setBuildingNames2(prev => ({
+    ...prev,
+    [type]: { ...prev[type], display_name: displayName }
+  }));
+  setEditingBuilding(null);
+}
   const buildings = {};
   for (const obj of objects) {
     if (!buildings[obj.type]) buildings[obj.type] = [];
@@ -198,7 +225,31 @@ export default function Buildings({ onNavigate }) {
                   <tr key={name}
                     onClick={() => setSelectedBuilding(isSelected ? null : name)}
                     style={{cursor:'pointer', background: isSelected ? '#f0f0ff' : 'inherit'}}>
-                    <td style={{fontWeight:500, color:'#534AB7'}}>{name}</td>
+                    <td style={{fontWeight:500}}>
+  {editingBuilding === name ? (
+    <div style={{display:'flex', gap:6, alignItems:'center'}}>
+      <input autoFocus value={editingValue}
+        onChange={e => setEditingValue(e.target.value)}
+        onKeyDown={e => { if(e.key==='Enter') saveBuilding(name, editingValue); if(e.key==='Escape') setEditingBuilding(null); }}
+        style={{padding:'4px 8px', borderRadius:6, border:'1px solid #534AB7', fontSize:13, width:160}} />
+      <button onClick={() => saveBuilding(name, editingValue)}
+        style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>✓</button>
+      <button onClick={() => setEditingBuilding(null)}
+        style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:14}}>✕</button>
+    </div>
+  ) : (
+    <div style={{display:'flex', alignItems:'center', gap:8}}>
+      <span style={{color:'#534AB7', cursor:'pointer'}}
+        onClick={() => setSelectedBuilding(name === selectedBuilding ? null : name)}>
+        {buildingNames2[name]?.display_name || name}
+      </span>
+      <button onClick={e => { e.stopPropagation(); setEditingBuilding(name); setEditingValue(buildingNames2[name]?.display_name || name); }}
+        style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:12, padding:'2px 4px'}}>
+        ✎
+      </button>
+    </div>
+  )}
+</td>
                     <td style={{textAlign:'center'}}>{s.этажей || '—'}</td>
                     <td style={{textAlign:'center'}}>{s.всего}</td>
                     <td style={{textAlign:'center', color:'#3B6D11', fontWeight:500}}>{s.сдано}</td>
@@ -228,7 +279,10 @@ export default function Buildings({ onNavigate }) {
             
             {/* Заголовок */}
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
-              <div style={{fontWeight:700, fontSize:14, color:'#534AB7'}}>🏢 {selectedBuilding}</div>
+              <div style={{fontWeight:700, fontSize:14, color:'#534AB7'}}>
+  🏢 {buildingNames2[selectedBuilding]?.display_name || selectedBuilding}
+  <div style={{fontSize:11, color:'#aaa', fontWeight:400}}>{selectedBuilding}</div>
+</div>
               <button onClick={() => setSelectedBuilding(null)}
                 style={{background:'none', border:'none', cursor:'pointer', color:'#aaa', fontSize:16}}>✕</button>
             </div>
