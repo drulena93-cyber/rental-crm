@@ -57,7 +57,13 @@ setObjectTenants(ot || []);
 
     const { data: cons } = await supabase.from('contacts').select('*').is('deleted_at', null).order('full_name');
 const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
-const { data: objs } = await supabase.from('objects').select('id, name, type').is('deleted_at', null);
+const objRes2 = await fetch('/api/db', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: `SELECT id, name, type FROM objects WHERE deleted_at IS NULL`, params: [] })
+});
+const objData2 = await objRes2.json();
+const objs = objData2.rows || [];
 const otRes = await fetch('/api/db', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
