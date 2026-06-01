@@ -509,22 +509,35 @@ const getTenantObjects = (tenantId) => {
                         {days <= 30 && ` (${days} дн.)`}
                       </span>
                     ) : '—'}</td>
-                    <td onClick={e => e.stopPropagation()}>
-  <input type="checkbox" checked={t.in_invoice || false}
-    onClick={e => e.stopPropagation()}
-    onChange={async e => {
+                    <td onClick={e => e.stopPropagation()} style={{textAlign:'center'}}>
+  <button
+    onClick={async e => {
       e.stopPropagation();
-      await supabase.from('tenants').update({ in_invoice: e.target.checked }).eq('id', t.id);
-      setTenants(prev => prev.map(ten => ten.id === t.id ? { ...ten, in_invoice: e.target.checked } : ten));
+      const newVal = !t.in_invoice;
+      await supabase.from('tenants').update({ in_invoice: newVal }).eq('id', t.id);
+      setTenants(prev => prev.map(ten => ten.id === t.id ? { ...ten, in_invoice: newVal } : ten));
       try {
         const cached = localStorage.getItem('tenants_cache');
         if (cached) {
           const d = JSON.parse(cached);
-          d.tens = d.tens.map(ten => ten.id === t.id ? { ...ten, in_invoice: e.target.checked } : ten);
+          d.tens = d.tens.map(ten => ten.id === t.id ? { ...ten, in_invoice: newVal } : ten);
           localStorage.setItem('tenants_cache', JSON.stringify(d));
         }
       } catch(err) {}
-    }} />
+    }}
+    style={{
+      background: t.in_invoice ? '#EAF3DE' : '#f4f4f8',
+      color: t.in_invoice ? '#3B6D11' : '#aaa',
+      border: `1px solid ${t.in_invoice ? '#3B6D11' : '#ddd'}`,
+      borderRadius: 6,
+      padding: '3px 10px',
+      fontSize: 12,
+      cursor: 'pointer',
+      fontWeight: t.in_invoice ? 500 : 400,
+      minWidth: 50,
+    }}>
+    {t.in_invoice ? '✅ Да' : '—'}
+  </button>
 </td>
                     <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{t.updated_at ? new Date(t.updated_at).toLocaleDateString('ru-RU') : '—'}</td>
                     <td onClick={e => { e.stopPropagation(); onNavigate('contacts', t.id); }}>
