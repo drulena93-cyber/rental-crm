@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Objects from './pages/Objects';
 import Tenants from './pages/Tenants';
 import Analytics from './pages/Analytics';
@@ -7,8 +7,8 @@ import Trash from './pages/Trash';
 import Settings from './pages/Settings';
 import AllDocuments from './pages/AllDocuments';
 import InvoiceGeneration from './pages/InvoiceGeneration';
-import Buildings from './pages/Buildings';
 import Payments from './pages/Payments';
+import Buildings from './pages/Buildings';
 import './App.css';
 
 export default function App() {
@@ -17,6 +17,17 @@ export default function App() {
   const [contactTenantId, setContactTenantId] = useState(null);
   const [generationData, setGenerationData] = useState(null);
   const [navStack, setNavStack] = useState([]);
+  const [showPaymentsTab, setShowPaymentsTab] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT value FROM settings WHERE id = 'show_payments_tab'`, params: [] })
+    }).then(r => r.json()).then(d => {
+      setShowPaymentsTab(d.rows?.[0]?.value === 'true');
+    }).catch(() => {});
+  }, []);
 
   function changeTab(newTab) {
     setTab(newTab);
@@ -24,9 +35,7 @@ export default function App() {
   }
 
   function handleNavigate(section, id, data) {
-    // Сохраняем текущее состояние в стек
     setNavStack(prev => [...prev, { tab, highlightId, contactTenantId, generationData }]);
-
     if (section === 'tenants') {
       changeTab('tenants');
       setHighlightId(id);
@@ -75,25 +84,25 @@ export default function App() {
             </button>
           )}
           <button className={tab === 'buildings' ? 'active' : ''} onClick={() => handleTabClick('buildings')}>🏢 Здания</button>
-            <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
-<button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
+          <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
+          <button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
           <button className={tab === 'contacts' ? 'active' : ''} onClick={() => handleTabClick('contacts')}>Контакты</button>
           <button className={tab === 'documents' ? 'active' : ''} onClick={() => handleTabClick('documents')}>📄 Документы</button>
           <button className={tab === 'generation' ? 'active' : ''} onClick={() => handleTabClick('generation')}>✨ Генерация</button>
-            <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>
+          {showPaymentsTab && <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>}
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
         </nav>
       </div>
       <div className="content">
+        {tab === 'buildings' && <Buildings onNavigate={handleNavigate} />}
         {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} />}
-         {tab === 'buildings' && <Buildings onNavigate={handleNavigate} />}
         {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} />}
         {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
         {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
         {tab === 'generation' && <InvoiceGeneration onNavigate={handleNavigate} initialData={generationData} />}
+        {tab === 'payments' && <Payments onNavigate={handleNavigate} />}
         {tab === 'analytics' && <Analytics />}
-         {tab === 'payments' && <Payments onNavigate={handleNavigate} />}
         {tab === 'trash' && <Trash />}
         {tab === 'settings' && <Settings />}
       </div>
