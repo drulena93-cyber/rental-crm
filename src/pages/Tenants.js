@@ -474,7 +474,7 @@ const getTenantObjects = (tenantId) => {
                 const obj = getObject(t.object_id);
                 const days = daysLeft(t.contract_end);
                 return (
-                  <tr key={t.id} onClick={() => setSelected(t)}>
+                  <tr key={t.id} onClick={e => { if (e.target.type === 'checkbox') return; setSelected(t); }}>
                     <td>{t.name}</td>
                     <td>{typeBadge(t.type)}</td>
                     <td onClick={e => e.stopPropagation()}>
