@@ -63,7 +63,7 @@ function TenantPayments({ tenantId }) {
     </table>
   );
 }
-export default function Tenants({ onNavigate, highlightId }) {
+export default function Tenants({ onNavigate, highlightId, showPayments }) {
   const [tenants, setTenants] = useState([]);
   const [objects, setObjects] = useState([]);
   const [search, setSearch] = useState('');
