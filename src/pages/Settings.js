@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import * as XLSX from 'xlsx';
 
 export default function Settings() {
   const [orgs, setOrgs] = useState([]);
@@ -18,6 +19,7 @@ export default function Settings() {
   const [savingDefaults, setSavingDefaults] = useState(false);
   const [showPaymentsTab, setShowPaymentsTab] = useState(false);
   const fileRef = useRef();
+  const [exportingBackup, setExportingBackup] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -198,13 +200,76 @@ export default function Settings() {
     if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' КБ';
     return (bytes / 1024 / 1024).toFixed(1) + ' МБ';
   }
+async function exportBackup() {
+  setExportingBackup(true);
+  try {
+    const objRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT * FROM objects WHERE deleted_at IS NULL ORDER BY name`, params: [] })
+    });
+    const objData = await objRes.json();
 
+    const tenRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT * FROM tenants WHERE deleted_at IS NULL ORDER BY name`, params: [] })
+    });
+    const tenData = await tenRes.json();
+
+    const conRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT * FROM contacts WHERE deleted_at IS NULL ORDER BY full_name`, params: [] })
+    });
+    const conData = await conRes.json();
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(objData.rows || []), 'Объекты');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tenData.rows || []), 'Арендаторы');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(conData.rows || []), 'Контакты');
+
+    const wbArrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    const date = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-');
+    const filename = `CRM_Backup_${date}.xlsx`;
+
+    const base64 = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    });
+
+    const uploadRes = await fetch('/api/upload-to-yandex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, filedata: base64, folder: 'Резервные копии' })
+    });
+    const uploadData = await uploadRes.json();
+
+    if (uploadData.success) {
+      alert(`✅ Резервная копия сохранена на Яндекс Диск!\nПапка: Резервные копии/${filename}`);
+    } else {
+      alert('Ошибка загрузки на Яндекс Диск: ' + uploadData.error);
+    }
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
+  }
+  setExportingBackup(false);
+}
   return (
     <div>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
-        <h2 style={{fontSize:16, fontWeight:500}}>⚙️ Настройки</h2>
-        <button className="btn-add" onClick={openAdd}>+ Добавить организацию</button>
-      </div>
+  <h2 style={{fontSize:16, fontWeight:500}}>⚙️ Настройки</h2>
+  <div style={{display:'flex', gap:8}}>
+    <button onClick={exportBackup} disabled={exportingBackup}
+      style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'7px 14px', fontSize:13, cursor:'pointer'}}>
+      {exportingBackup ? '⏳ Выгружается...' : '📥 Резервная копия на Яндекс Диск'}
+    </button>
+    <button className="btn-add" onClick={openAdd}>+ Добавить организацию</button>
+  </div>
+</div>
 
       <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Организации арендодателя</div>
 
