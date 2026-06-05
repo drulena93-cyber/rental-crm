@@ -338,7 +338,13 @@ useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]
     let va = a[sortField], vb = b[sortField];
     if (va == null) va = ''; if (vb == null) vb = '';
     if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
-    return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
+    if (sortField === 'office') {
+  const na = parseInt(va) || 0;
+  const nb = parseInt(vb) || 0;
+  if (na !== nb) return sortDir === 'asc' ? na - nb : nb - na;
+  return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
+}
+return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
   });
 
   // Пагинация
