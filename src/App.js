@@ -97,7 +97,7 @@ export default function App() {
       <div className="content">
         {tab === 'buildings' && <Buildings onNavigate={handleNavigate} />}
         {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} />}
-        {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} />}
+        {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} showPayments={showPaymentsTab} />}
         {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
         {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
         {tab === 'generation' && <InvoiceGeneration onNavigate={handleNavigate} initialData={generationData} />}
