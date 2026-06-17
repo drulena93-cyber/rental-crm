@@ -92,6 +92,7 @@ export default function App() {
           {showPaymentsTab && <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>}
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
+          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
         </nav>
       </div>
       <div className="content">
@@ -102,7 +103,7 @@ export default function App() {
         {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
         {tab === 'generation' && <InvoiceGeneration onNavigate={handleNavigate} initialData={generationData} />}
         {tab === 'payments' && <Payments onNavigate={handleNavigate} />}
-        {tab === 'analytics' && <Analytics />}
+        {tab === 'analytics' && <Analytics onNavigate={handleNavigate} />}
         {tab === 'trash' && <Trash />}
         {tab === 'settings' && <Settings />}
       </div>
