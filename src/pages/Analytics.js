@@ -107,7 +107,7 @@ export default function Analytics({ onNavigate }) {
   return (
     <div>
       {/* ── Сводка ── */}
-      <div className="stats" style={{marginBottom:8}}>
+      <div className="stats" style={{marginBottom:8, gridTemplateColumns:'repeat(5, 1fr)'}}>
   <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{учитываемые.length}</div></div>
   <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{сдано.length}</div></div>
   <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{свободно.length}</div></div>
