@@ -8,6 +8,7 @@ export default function Analytics({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [expandedBuilding, setExpandedBuilding] = useState(null);
   const [expandedType, setExpandedType] = useState(null);
+  const [expandedMonth, setExpandedMonth] = useState(null);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -83,20 +84,19 @@ export default function Analytics({ onNavigate }) {
   }
 
   const turnoverData = months.map(({ year, month, label }) => {
-    // Въехали — contract_start в этом месяце
-    const въехало = tenants.filter(t => {
-      if (!t.contract_start) return false;
-      const d = new Date(t.contract_start);
-      return d.getFullYear() === year && d.getMonth() + 1 === month;
-    }).length;
-    // Выехали — date_to в object_history в этом месяце
-    const выехало = history.filter(h => {
-      if (!h.date_to) return false;
-      const d = new Date(h.date_to);
-      return d.getFullYear() === year && d.getMonth() + 1 === month;
-    }).length;
-    return { label, въехало, выехало };
+  const въехавшие = tenants.filter(t => {
+    if (!t.contract_start) return false;
+    const d = new Date(t.contract_start);
+    return d.getFullYear() === year && d.getMonth() + 1 === month;
   });
+  const выехавшие = history.filter(h => {
+    if (!h.date_to) return false;
+    const d = new Date(h.date_to);
+    return d.getFullYear() === year && d.getMonth() + 1 === month;
+  });
+  const процент = активные.length > 0 ? Math.round((выехавшие.length / активные.length) * 100) : 0;
+  return { label, year, month, въехало: въехавшие.length, выехало: выехавшие.length, въехавшие, выехавшие, процент };
+});
 
   const sectionTitle = (text) => (
     <div style={{fontSize:13, fontWeight:600, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', margin:'24px 0 12px'}}>
@@ -108,13 +108,12 @@ export default function Analytics({ onNavigate }) {
     <div>
       {/* ── Сводка ── */}
       <div className="stats" style={{marginBottom:8}}>
-        <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{учитываемые.length}</div></div>
-        <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{сдано.length}</div></div>
-        <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{свободно.length}</div></div>
-        <div className="stat"><div className="stat-label">Заполненность</div><div className="stat-val blue">{заполненность}%</div></div>
-        <div className="stat"><div className="stat-label">Аренда в месяц</div><div className="stat-val" style={{fontSize:14}}>{общаяАренда.toLocaleString('ru-RU')} ₽</div></div>
-        <div className="stat"><div className="stat-label">Активных арендаторов</div><div className="stat-val">{активные.length}</div></div>
-      </div>
+  <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{учитываемые.length}</div></div>
+  <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{сдано.length}</div></div>
+  <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{свободно.length}</div></div>
+  <div className="stat"><div className="stat-label">Заполненность</div><div className="stat-val blue">{заполненность}%</div></div>
+  <div className="stat"><div className="stat-label">Активных арендаторов</div><div className="stat-val">{активные.length}</div></div>
+</div>
 
       {/* ── Типы арендаторов ── */}
       {sectionTitle('Типы арендаторов')}
@@ -234,36 +233,117 @@ export default function Analytics({ onNavigate }) {
 
       {/* ── Текучка по месяцам ── */}
       {sectionTitle('Текучка арендаторов за 12 месяцев')}
-      <table>
-        <thead>
-          <tr>
-            <th>Месяц</th>
-            <th style={{textAlign:'center', color:'#3B6D11'}}>Въехало</th>
-            <th style={{textAlign:'center', color:'#A32D2D'}}>Выехало</th>
-            <th style={{textAlign:'center'}}>Баланс</th>
+<table>
+  <thead>
+    <tr>
+      <th>Месяц</th>
+      <th style={{textAlign:'center', color:'#3B6D11'}}>Въехало</th>
+      <th style={{textAlign:'center', color:'#A32D2D'}}>Выехало</th>
+      <th style={{textAlign:'center'}}>Баланс</th>
+      <th style={{textAlign:'center'}}>% текучки</th>
+    </tr>
+  </thead>
+  <tbody>
+    {turnoverData.map((row, i) => {
+      const баланс = row.въехало - row.выехало;
+      const isExp = expandedMonth === i;
+      return (
+        <React.Fragment key={i}>
+          <tr style={{cursor:'pointer', background: isExp ? '#f0f0ff' : 'inherit'}}
+            onClick={() => setExpandedMonth(isExp ? null : i)}>
+            <td style={{fontWeight:500}}>
+              {isExp ? '▼ ' : '▶ '}{row.label}
+            </td>
+            <td style={{textAlign:'center', color:'#3B6D11', fontWeight: row.въехало > 0 ? 500 : 400}}>
+              {row.въехало > 0 ? `+${row.въехало}` : '—'}
+            </td>
+            <td style={{textAlign:'center', color:'#A32D2D', fontWeight: row.выехало > 0 ? 500 : 400}}>
+              {row.выехало > 0 ? `-${row.выехало}` : '—'}
+            </td>
+            <td style={{textAlign:'center', fontWeight:500,
+              color: баланс > 0 ? '#3B6D11' : баланс < 0 ? '#A32D2D' : '#888'}}>
+              {баланс > 0 ? `+${баланс}` : баланс < 0 ? баланс : '0'}
+            </td>
+            <td style={{textAlign:'center', fontSize:12, color: row.процент > 10 ? '#A32D2D' : '#888'}}>
+              {row.процент > 0 ? `${row.процент}%` : '—'}
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {turnoverData.map((row, i) => {
-            const баланс = row.въехало - row.выехало;
-            return (
-              <tr key={i}>
-                <td style={{fontWeight:500}}>{row.label}</td>
-                <td style={{textAlign:'center', color:'#3B6D11', fontWeight: row.въехало > 0 ? 500 : 400}}>
-                  {row.въехало > 0 ? `+${row.въехало}` : '—'}
-                </td>
-                <td style={{textAlign:'center', color:'#A32D2D', fontWeight: row.выехало > 0 ? 500 : 400}}>
-                  {row.выехало > 0 ? `-${row.выехало}` : '—'}
-                </td>
-                <td style={{textAlign:'center', fontWeight:500,
-                  color: баланс > 0 ? '#3B6D11' : баланс < 0 ? '#A32D2D' : '#888'}}>
-                  {баланс > 0 ? `+${баланс}` : баланс < 0 ? баланс : '0'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+          {isExp && (
+            <tr>
+              <td colSpan={5} style={{padding:0}}>
+                <div style={{background:'#f8f8ff', padding:'12px 16px', borderBottom:'1px solid #e5e5e5'}}>
+                  {row.въехавшие.length > 0 && (
+                    <div style={{marginBottom:12}}>
+                      <div style={{fontSize:12, fontWeight:600, color:'#3B6D11', marginBottom:6}}>
+                        ✅ Въехали ({row.въехавшие.length})
+                      </div>
+                      <table style={{width:'100%', fontSize:12}}>
+                        <thead>
+                          <tr>
+                            <th style={{textAlign:'left'}}>Арендатор</th>
+                            <th style={{textAlign:'left'}}>Тип</th>
+                            <th style={{textAlign:'left'}}>Объект</th>
+                            <th style={{textAlign:'left'}}>Дата въезда</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row.въехавшие.map(t => {
+                            const tenantObjs = objectTenants.filter(ot => ot.tenant_id === t.id).map(ot => objects.find(o => o.id === ot.object_id)?.name).filter(Boolean);
+                            return (
+                              <tr key={t.id} style={{cursor:'pointer'}} onClick={() => onNavigate('tenants', t.id)}>
+                                <td style={{color:'#534AB7'}}>{t.name}</td>
+                                <td>{t.type || '—'}</td>
+                                <td>{tenantObjs.join(', ') || '—'}</td>
+                                <td>{t.contract_start ? new Date(t.contract_start).toLocaleDateString('ru-RU') : '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {row.выехавшие.length > 0 && (
+                    <div>
+                      <div style={{fontSize:12, fontWeight:600, color:'#A32D2D', marginBottom:6}}>
+                        ❌ Выехали ({row.выехавшие.length})
+                      </div>
+                      <table style={{width:'100%', fontSize:12}}>
+                        <thead>
+                          <tr>
+                            <th style={{textAlign:'left'}}>Арендатор</th>
+                            <th style={{textAlign:'left'}}>Объект</th>
+                            <th style={{textAlign:'left'}}>Здание</th>
+                            <th style={{textAlign:'left'}}>Дата выезда</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row.выехавшие.map((h, hi) => {
+                            const obj = objects.find(o => o.id === h.object_id);
+                            return (
+                              <tr key={hi}>
+                                <td>{h.tenant_name || '—'}</td>
+                                <td>{obj?.name || '—'}</td>
+                                <td style={{fontSize:11, color:'#888'}}>{obj?.type || '—'}</td>
+                                <td>{h.date_to ? new Date(h.date_to).toLocaleDateString('ru-RU') : '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {row.въехавшие.length === 0 && row.выехавшие.length === 0 && (
+                    <div style={{color:'#aaa', fontSize:12, textAlign:'center', padding:8}}>Нет движения в этом месяце</div>
+                  )}
+                </div>
+              </td>
+            </tr>
+          )}
+        </React.Fragment>
+      );
+    })}
+  </tbody>
+</table>
     </div>
   );
 }
