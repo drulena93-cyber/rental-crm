@@ -1,170 +1,269 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
 
-export default function Analytics() {
+export default function Analytics({ onNavigate }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
-  const [filterFloor, setFilterFloor] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [objectTenants, setObjectTenants] = useState([]);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expandedBuilding, setExpandedBuilding] = useState(null);
+  const [expandedType, setExpandedType] = useState(null);
 
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
-    const { data: objs } = await supabase.from('objects').select('*');
-    const { data: tens } = await supabase.from('tenants').select('*');
-    setObjects(objs || []);
-    setTenants(tens || []);
+    try {
+      const [objRes, tenRes, otRes, histRes] = await Promise.all([
+        fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ query: `SELECT * FROM objects WHERE deleted_at IS NULL`, params:[] }) }),
+        fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ query: `SELECT * FROM tenants WHERE deleted_at IS NULL`, params:[] }) }),
+        fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ query: `SELECT ot.*, o.type as object_type FROM object_tenants ot JOIN objects o ON o.id = ot.object_id WHERE o.deleted_at IS NULL`, params:[] }) }),
+        fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ query: `SELECT * FROM object_history ORDER BY date_to DESC`, params:[] }) }),
+      ]);
+      const [objData, tenData, otData, histData] = await Promise.all([
+        objRes.json(), tenRes.json(), otRes.json(), histRes.json()
+      ]);
+      setObjects(objData.rows || []);
+      setTenants(tenData.rows || []);
+      setObjectTenants(otData.rows || []);
+      setHistory(histData.rows || []);
+    } catch(e) { console.error(e); }
     setLoading(false);
   }
 
-  const today = new Date();
-
-  const filtered = objects.filter(o => {
-    if (filterFloor && o.floor !== parseInt(filterFloor)) return false;
-    if (filterStatus && o.status !== filterStatus) return false;
-    return true;
-  });
-
-  const countable = filtered.filter(o => o.status !== 'Не учитывать');
-  const rented = filtered.filter(o => o.status === 'Сдано');
-  const free = filtered.filter(o => o.status === 'Не сдано');
-  
-  const pct = countable.length ? Math.round(rented.length / countable.length * 100) : 0;
-
-  const expiring = tenants.filter(t => {
-    if (!t.contract_end) return false;
-    const d = new Date(t.contract_end);
-    const diff = (d - today) / (1000 * 60 * 60 * 24);
-    return diff >= 0 && diff <= 30;
-  });
-
-  const daysLeft = (date) => {
-    const d = new Date(date);
-    return Math.ceil((d - today) / (1000 * 60 * 60 * 24));
-  };
-
-  const fyzCount = tenants.filter(t => t.type === 'ФИЗ.ЛИЦО').length;
-  const jurCount = tenants.filter(t => t.type === 'ЮРИД.ЛИЦО').length;
-  const ipCount = tenants.filter(t => t.type === 'ИП').length;
-  const noObj = tenants.filter(t => !t.object_id).length;
-
-  const floors = [1, 2, 3];
-  const floorData = floors.map(f => ({
-    floor: f,
-    rented: objects.filter(o => o.floor === f && o.status === 'Сдано').length,
-    total: objects.filter(o => o.floor === f && o.status !== 'Не учитывать').length,
-  }));
-
   if (loading) return <p>Загрузка...</p>;
+
+  // ── Общая сводка ──────────────────────────────────────────────────────────
+  const учитываемые = objects.filter(o => o.status !== 'Не учитывать');
+  const сдано = учитываемые.filter(o => o.status === 'Сдано');
+  const свободно = учитываемые.filter(o => o.status === 'Не сдано');
+  const заполненность = учитываемые.length ? Math.round(сдано.length / учитываемые.length * 100) : 0;
+  const общаяАренда = сдано.reduce((s, o) => s + (parseFloat(o.rent) || 0) + (parseFloat(o.utility_cost) || 0), 0);
+
+  const активные = tenants.filter(t => t.status === 'Активный');
+  const ип = активные.filter(t => t.type === 'ИП');
+  const ооо = активные.filter(t => t.type === 'ЮРИД.ЛИЦО');
+  const физ = активные.filter(t => t.type === 'ФИЗ.ЛИЦО');
+
+  // ── По зданиям ────────────────────────────────────────────────────────────
+  const buildingMap = {};
+  for (const obj of objects) {
+    if (!obj.type) continue;
+    if (!buildingMap[obj.type]) buildingMap[obj.type] = [];
+    buildingMap[obj.type].push(obj);
+  }
+  const buildingNames = Object.keys(buildingMap).sort();
+
+  function getBuildingStats(objs) {
+    const у = objs.filter(o => o.status !== 'Не учитывать');
+    const с = у.filter(o => o.status === 'Сдано');
+    const св = у.filter(o => o.status === 'Не сдано');
+    const аренда = с.reduce((s, o) => s + (parseFloat(o.rent)||0) + (parseFloat(o.utility_cost)||0), 0);
+    // типы арендаторов в этом здании
+    const tenantIds = objectTenants.filter(ot => objs.find(o => o.id === ot.object_id)).map(ot => ot.tenant_id);
+    const buildingTenants = tenants.filter(t => tenantIds.includes(t.id) && t.status === 'Активный');
+    return {
+      всего: у.length, сдано: с.length, свободно: св.length, аренда,
+      ип: buildingTenants.filter(t => t.type === 'ИП').length,
+      ооо: buildingTenants.filter(t => t.type === 'ЮРИД.ЛИЦО').length,
+      физ: buildingTenants.filter(t => t.type === 'ФИЗ.ЛИЦО').length,
+    };
+  }
+
+  // ── Текучка по месяцам ────────────────────────────────────────────────────
+  const months = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ year: d.getFullYear(), month: d.getMonth() + 1, label: d.toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' }) });
+  }
+
+  const turnoverData = months.map(({ year, month, label }) => {
+    // Въехали — contract_start в этом месяце
+    const въехало = tenants.filter(t => {
+      if (!t.contract_start) return false;
+      const d = new Date(t.contract_start);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    }).length;
+    // Выехали — date_to в object_history в этом месяце
+    const выехало = history.filter(h => {
+      if (!h.date_to) return false;
+      const d = new Date(h.date_to);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    }).length;
+    return { label, въехало, выехало };
+  });
+
+  const sectionTitle = (text) => (
+    <div style={{fontSize:13, fontWeight:600, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', margin:'24px 0 12px'}}>
+      {text}
+    </div>
+  );
 
   return (
     <div>
-      <div className="toolbar">
-        <select value={filterFloor} onChange={e => setFilterFloor(e.target.value)}>
-          <option value="">Все этажи</option>
-          <option value="1">1 этаж</option>
-          <option value="2">2 этаж</option>
-          <option value="3">3 этаж</option>
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="">Все статусы</option>
-          <option>Сдано</option>
-          <option>Не сдано</option>
-          <option>Не учитывать</option>
-        </select>
+      {/* ── Сводка ── */}
+      <div className="stats" style={{marginBottom:8}}>
+        <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{учитываемые.length}</div></div>
+        <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{сдано.length}</div></div>
+        <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{свободно.length}</div></div>
+        <div className="stat"><div className="stat-label">Заполненность</div><div className="stat-val blue">{заполненность}%</div></div>
+        <div className="stat"><div className="stat-label">Аренда в месяц</div><div className="stat-val" style={{fontSize:14}}>{общаяАренда.toLocaleString('ru-RU')} ₽</div></div>
+        <div className="stat"><div className="stat-label">Активных арендаторов</div><div className="stat-val">{активные.length}</div></div>
       </div>
 
-      <div className="stats">
-        <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{filtered.length}</div></div>
-        <div className="stat"><div className="stat-label">Сдано ({pct}%)</div><div className="stat-val green">{rented.length}</div></div>
-        <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{free.length}</div></div>
+      {/* ── Типы арендаторов ── */}
+      {sectionTitle('Типы арендаторов')}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:8}}>
+        {[
+          { label: 'ИП', list: ип, color: '#185FA5', bg: '#E6F1FB' },
+          { label: 'ООО / Юр. лица', list: ооо, color: '#854F0B', bg: '#FAEEDA' },
+          { label: 'Физ. лица', list: физ, color: '#3B6D11', bg: '#EAF3DE' },
+        ].map(item => (
+          <div key={item.label}
+            onClick={() => setExpandedType(expandedType === item.label ? null : item.label)}
+            style={{background:'#fff', border:`1px solid ${item.color}`, borderRadius:10, padding:16, cursor:'pointer'}}>
+            <div style={{fontSize:13, color:item.color, fontWeight:600, marginBottom:4}}>{item.label}</div>
+            <div style={{fontSize:28, fontWeight:700, color:item.color}}>{item.list.length}</div>
+            <div style={{fontSize:11, color:'#aaa', marginTop:4}}>
+              {активные.length ? Math.round(item.list.length / активные.length * 100) : 0}% от активных
+            </div>
+            <div style={{fontSize:11, color:item.color, marginTop:6}}>{expandedType === item.label ? '▲ Скрыть' : '▼ Показать список'}</div>
+          </div>
+        ))}
       </div>
 
-      {expiring.length > 0 && (
-        <div className="alert">
-          ⚠️ Договоры истекают в ближайшие 30 дней:
-          <ul style={{marginTop: 8, paddingLeft: 16}}>
-            {expiring.map(t => (
-              <li key={t.id}>{t.name} — {new Date(t.contract_end).toLocaleDateString('ru-RU')} (осталось {daysLeft(t.contract_end)} дн.)</li>
-            ))}
-          </ul>
+      {/* Детализация по типу */}
+      {expandedType && (
+        <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:8}}>
+          <div style={{fontWeight:500, fontSize:13, marginBottom:10}}>{expandedType} — список арендаторов</div>
+          <table>
+            <thead><tr><th>Арендатор</th><th>Статус</th><th>Объект</th><th>Окончание договора</th></tr></thead>
+            <tbody>
+              {(expandedType === 'ИП' ? ип : expandedType === 'ООО / Юр. лица' ? ооо : физ).map(t => {
+                const tenantObjs = objectTenants.filter(ot => ot.tenant_id === t.id).map(ot => objects.find(o => o.id === ot.object_id)?.name).filter(Boolean);
+                return (
+                  <tr key={t.id} style={{cursor:'pointer'}} onClick={() => onNavigate('tenants', t.id)}>
+                    <td style={{color:'#534AB7'}}>{t.name}</td>
+                    <td><span className={`badge ${t.status === 'Активный' ? 'badge-green' : 'badge-gray'}`}>{t.status}</span></td>
+                    <td style={{fontSize:12}}>{tenantObjs.join(', ') || '—'}</td>
+                    <td style={{fontSize:12}}>{t.contract_end ? new Date(t.contract_end).toLocaleDateString('ru-RU') : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <div className="charts-row">
-        <div className="chart-card">
-          <div className="chart-title">Занятость по этажам</div>
-          {floorData.map(f => (
-            <div key={f.floor} style={{marginBottom: 12}}>
-              <div style={{display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4}}>
-                <span>{f.floor} этаж</span>
-                <span style={{color:'#888'}}>{f.rented} из {f.total}</span>
-              </div>
-              <div style={{background:'#f0f0f0', borderRadius:4, height:8}}>
-                <div style={{
-                  width: f.total ? `${Math.round(f.rented/f.total*100)}%` : '0%',
-                  background:'#534AB7', borderRadius:4, height:8, transition:'width 0.3s'
-                }}/>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* ── По зданиям ── */}
+      {sectionTitle('По зданиям')}
+      <table>
+        <thead>
+          <tr>
+            <th>Здание</th>
+            <th style={{textAlign:'center'}}>Всего</th>
+            <th style={{textAlign:'center'}}>Сдано</th>
+            <th style={{textAlign:'center'}}>Свободно</th>
+            <th style={{textAlign:'center'}}>ИП</th>
+            <th style={{textAlign:'center'}}>ООО</th>
+            <th style={{textAlign:'center'}}>Физ.</th>
+            <th style={{textAlign:'right'}}>Аренда ₽</th>
+            <th style={{minWidth:100}}>Заполн.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {buildingNames.map(name => {
+            const s = getBuildingStats(buildingMap[name]);
+            const pct = s.всего ? Math.round(s.сдано / s.всего * 100) : 0;
+            const barColor = pct === 100 ? '#3B6D11' : pct > 50 ? '#534AB7' : '#f0a500';
+            const isExp = expandedBuilding === name;
+            return (
+              <>
+                <tr key={name} style={{cursor:'pointer', background: isExp ? '#f0f0ff' : 'inherit'}}
+                  onClick={() => setExpandedBuilding(isExp ? null : name)}>
+                  <td style={{fontWeight:500, color:'#534AB7'}}>
+                    {isExp ? '▼ ' : '▶ '}{name}
+                  </td>
+                  <td style={{textAlign:'center'}}>{s.всего}</td>
+                  <td style={{textAlign:'center', color:'#3B6D11', fontWeight:500}}>{s.сдано}</td>
+                  <td style={{textAlign:'center', color: s.свободно > 0 ? '#A32D2D' : '#888'}}>{s.свободно}</td>
+                  <td style={{textAlign:'center', fontSize:12}}>{s.ип}</td>
+                  <td style={{textAlign:'center', fontSize:12}}>{s.ооо}</td>
+                  <td style={{textAlign:'center', fontSize:12}}>{s.физ}</td>
+                  <td style={{textAlign:'right', fontSize:12}}>{s.аренда > 0 ? s.аренда.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+                  <td>
+                    <div style={{display:'flex', alignItems:'center', gap:6}}>
+                      <div style={{flex:1, background:'#f0f0f0', borderRadius:4, height:7, overflow:'hidden'}}>
+                        <div style={{background:barColor, width:`${pct}%`, height:'100%', borderRadius:4}} />
+                      </div>
+                      <span style={{fontSize:11, color:'#888'}}>{pct}%</span>
+                    </div>
+                  </td>
+                </tr>
+                {isExp && buildingMap[name].filter(o => o.status !== 'Не учитывать').map(obj => {
+                  const ots = objectTenants.filter(ot => ot.object_id === obj.id);
+                  const objTenants = tenants.filter(t => ots.find(ot => ot.tenant_id === t.id));
+                  return (
+                    <tr key={obj.id} style={{background:'#f8f8ff', fontSize:12}}>
+                      <td style={{paddingLeft:24, color:'#534AB7', cursor:'pointer'}}
+                        onClick={e => { e.stopPropagation(); onNavigate('objects', obj.id); }}>
+                        → {obj.name}
+                      </td>
+                      <td colSpan={2} style={{textAlign:'center'}}>
+                        <span className={`badge ${obj.status === 'Сдано' ? 'badge-green' : 'badge-red'}`}>{obj.status}</span>
+                      </td>
+                      <td style={{textAlign:'center'}}>{obj.area ? obj.area + ' м²' : '—'}</td>
+                      <td colSpan={3} style={{fontSize:11, color:'#555'}}>
+                        {objTenants.map(t => t.name).join(', ') || '—'}
+                      </td>
+                      <td style={{textAlign:'right'}}>{obj.rent ? parseFloat(obj.rent).toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+                      <td></td>
+                    </tr>
+                  );
+                })}
+              </>
+            );
+          })}
+        </tbody>
+      </table>
 
-        <div className="chart-card">
-          <div className="chart-title">Арендаторы по типу</div>
-          {[
-            {label: 'Физ. лица', count: fyzCount, color: '#888780'},
-            {label: 'Юрид. лица', count: jurCount, color: '#854F0B'},
-            {label: 'ИП', count: ipCount, color: '#185FA5'},
-            {label: 'Без объекта', count: noObj, color: '#A32D2D'},
-          ].map(item => (
-            <div key={item.label} style={{marginBottom: 12}}>
-              <div style={{display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4}}>
-                <span>{item.label}</span>
-                <span style={{color:'#888'}}>{item.count} чел.</span>
-              </div>
-              <div style={{background:'#f0f0f0', borderRadius:4, height:8}}>
-                <div style={{
-                  width: tenants.length ? `${Math.round(item.count/tenants.length*100)}%` : '0%',
-                  background: item.color, borderRadius:4, height:8, transition:'width 0.3s'
-                }}/>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="chart-card" style={{marginBottom: 14}}>
-        <div className="chart-title">Детализация по объектам</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Объект</th>
-              <th>Этаж</th>
-              <th>Статус</th>
-              <th>Площадь</th>
-              <th>₽/мес</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(o => (
-              <tr key={o.id}>
-                <td>{o.name}</td>
-                <td>{o.floor || '—'}</td>
-                <td>
-                  {o.status === 'Сдано' && <span className="badge badge-green">{o.status}</span>}
-                  {o.status === 'Не сдано' && <span className="badge badge-red">{o.status}</span>}
-                  {o.status === 'Не учитывать' && <span className="badge badge-gray">{o.status}</span>}
+      {/* ── Текучка по месяцам ── */}
+      {sectionTitle('Текучка арендаторов за 12 месяцев')}
+      <table>
+        <thead>
+          <tr>
+            <th>Месяц</th>
+            <th style={{textAlign:'center', color:'#3B6D11'}}>Въехало</th>
+            <th style={{textAlign:'center', color:'#A32D2D'}}>Выехало</th>
+            <th style={{textAlign:'center'}}>Баланс</th>
+          </tr>
+        </thead>
+        <tbody>
+          {turnoverData.map((row, i) => {
+            const баланс = row.въехало - row.выехало;
+            return (
+              <tr key={i}>
+                <td style={{fontWeight:500}}>{row.label}</td>
+                <td style={{textAlign:'center', color:'#3B6D11', fontWeight: row.въехало > 0 ? 500 : 400}}>
+                  {row.въехало > 0 ? `+${row.въехало}` : '—'}
                 </td>
-                <td>{o.area ? `${o.area} м²` : '—'}</td>
-                <td>{o.rent ? o.rent.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+                <td style={{textAlign:'center', color:'#A32D2D', fontWeight: row.выехало > 0 ? 500 : 400}}>
+                  {row.выехало > 0 ? `-${row.выехало}` : '—'}
+                </td>
+                <td style={{textAlign:'center', fontWeight:500,
+                  color: баланс > 0 ? '#3B6D11' : баланс < 0 ? '#A32D2D' : '#888'}}>
+                  {баланс > 0 ? `+${баланс}` : баланс < 0 ? баланс : '0'}
+                </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
