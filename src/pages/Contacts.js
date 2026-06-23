@@ -9,17 +9,19 @@ const CACHE_TTL = 60 * 1000;
 export default function Contacts({ tenantId, onNavigate }) {
   const [contacts, setContacts] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [contactTypes, setContactTypes] = useState([]);
   const [selectedTenant, setSelectedTenant] = useState(tenantId || '');
   const [search, setSearch] = useState('');
+  const [filterContactType, setFilterContactType] = useState('');
+  const [filterObjectType, setFilterObjectType] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(() => parseInt(localStorage.getItem('contacts_page') || '1'));
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [filterObjectType, setFilterObjectType] = useState('');
-const [objects, setObjects] = useState([]);
-const [objectTenants, setObjectTenants] = useState([]);
+  const [objects, setObjects] = useState([]);
+  const [objectTenants, setObjectTenants] = useState([]);
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -32,8 +34,8 @@ const [objectTenants, setObjectTenants] = useState([]);
   }, [page]);
 
   useEffect(() => {
-  setPage(1);
-}, [search, selectedTenant, filterObjectType]);
+    setPage(1);
+  }, [search, selectedTenant, filterObjectType, filterContactType]);
 
   async function fetchAll(forceRefresh = false) {
     if (!forceRefresh) {
@@ -41,11 +43,12 @@ const [objectTenants, setObjectTenants] = useState([]);
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
         try {
-          const { cons, tens, objs, ot } = JSON.parse(cached);
-setContacts(cons || []);
-setTenants(tens || []);
-setObjects(objs || []);
-setObjectTenants(ot || []);
+          const { cons, tens, objs, ot, ctypes } = JSON.parse(cached);
+          setContacts(cons || []);
+          setTenants(tens || []);
+          setObjects(objs || []);
+          setObjectTenants(ot || []);
+          setContactTypes(ctypes || []);
           setLastUpdated(new Date(parseInt(cachedTime)));
           setLoading(false);
           return;
@@ -56,54 +59,69 @@ setObjectTenants(ot || []);
     forceRefresh ? setRefreshing(true) : setLoading(true);
 
     const { data: cons } = await supabase.from('contacts').select('*').is('deleted_at', null).order('full_name');
-const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
-const objRes2 = await fetch('/api/db', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ query: `SELECT id, name, type FROM objects WHERE deleted_at IS NULL`, params: [] })
-});
-const objData2 = await objRes2.json();
-const objs = objData2.rows || [];
-const otRes = await fetch('/api/db', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ query: `SELECT object_id, tenant_id FROM object_tenants`, params: [] })
-});
-const otData = await otRes.json();
+    const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
 
+    const objRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT id, name, type FROM objects WHERE deleted_at IS NULL`, params: [] })
+    });
+    const objData = await objRes.json();
+    const objs = objData.rows || [];
 
-  const now = Date.now();
-const otRows = otData.rows || [];
-localStorage.setItem(CACHE_KEY, JSON.stringify({ cons: cons || [], tens: tens || [], objs: objs || [], ot: otRows }));
-localStorage.setItem(CACHE_TIME_KEY, String(now));
-setContacts(cons || []);
-setTenants(tens || []);
-setObjects(objs || []);
-setObjectTenants(otRows);
-setLastUpdated(new Date(now));
-setLoading(false);
-setRefreshing(false);  
+    const otRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT object_id, tenant_id FROM object_tenants`, params: [] })
+    });
+    const otData = await otRes.json();
+
+    const ctRes = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT * FROM contact_types ORDER BY created_at`, params: [] })
+    });
+    const ctData = await ctRes.json();
+    const ctypes = ctData.rows || [];
+
+    const now = Date.now();
+    const otRows = otData.rows || [];
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ cons: cons || [], tens: tens || [], objs, ot: otRows, ctypes }));
+    localStorage.setItem(CACHE_TIME_KEY, String(now));
+    setContacts(cons || []);
+    setTenants(tens || []);
+    setObjects(objs);
+    setObjectTenants(otRows);
+    setContactTypes(ctypes);
+    setLastUpdated(new Date(now));
+    setLoading(false);
+    setRefreshing(false);
   }
 
   const objectTypesByTenant = {};
-for (const ot of objectTenants) {
-  const obj = objects.find(o => o.id === ot.object_id);
-  if (obj?.type) {
-    if (!objectTypesByTenant[ot.tenant_id]) objectTypesByTenant[ot.tenant_id] = new Set();
-    objectTypesByTenant[ot.tenant_id].add(obj.type);
+  for (const ot of objectTenants) {
+    const obj = objects.find(o => o.id === ot.object_id);
+    if (obj?.type) {
+      if (!objectTypesByTenant[ot.tenant_id]) objectTypesByTenant[ot.tenant_id] = new Set();
+      objectTypesByTenant[ot.tenant_id].add(obj.type);
+    }
   }
-}
 
-const filtered = contacts.filter(c => {
-  if (selectedTenant && c.tenant_id !== selectedTenant) return false;
-  if (filterObjectType) {
-    const types = objectTypesByTenant[c.tenant_id];
-    if (!types || !types.has(filterObjectType)) return false;
-  }
-  if (search && !c.full_name?.toLowerCase().includes(search.toLowerCase()) &&
-      !c.phone?.toLowerCase().includes(search.toLowerCase()) && !c.email?.toLowerCase().includes(search.toLowerCase())) return false;
-  return true;
-});
+  const isRenter = (c) => !c.contact_type || c.contact_type === 'Арендатор';
+
+  const filtered = contacts.filter(c => {
+    if (selectedTenant && c.tenant_id !== selectedTenant) return false;
+    if (filterContactType && c.contact_type !== filterContactType) return false;
+    if (filterObjectType) {
+      const types = objectTypesByTenant[c.tenant_id];
+      if (!types || !types.has(filterObjectType)) return false;
+    }
+    if (search && !c.full_name?.toLowerCase().includes(search.toLowerCase()) &&
+        !c.phone?.toLowerCase().includes(search.toLowerCase()) &&
+        !c.email?.toLowerCase().includes(search.toLowerCase()) &&
+        !c.services?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -111,7 +129,7 @@ const filtered = contacts.filter(c => {
   const getTenantName = (id) => tenants.find(t => t.id === id)?.name || '—';
 
   function openAdd() {
-    setForm({ tenant_id: selectedTenant || '', is_primary: false });
+    setForm({ tenant_id: selectedTenant || '', is_primary: false, contact_type: 'Арендатор' });
     setShowForm(true);
   }
 
@@ -137,29 +155,41 @@ const filtered = contacts.filter(c => {
     fetchAll(true);
   }
 
+  function typeBadge(type) {
+    const colors = {
+      'Арендатор': { bg: '#EAF3DE', color: '#3B6D11' },
+      'Ремонт сантехники': { bg: '#E6F1FB', color: '#185FA5' },
+      'Ремонт аппаратуры': { bg: '#FFF8E1', color: '#f0a500' },
+      'Ремонт крыши': { bg: '#FAEEDA', color: '#854F0B' },
+      'Подрядчик': { bg: '#f0f0ff', color: '#534AB7' },
+    };
+    const s = colors[type] || { bg: '#f4f4f8', color: '#555' };
+    return <span style={{background:s.bg, color:s.color, borderRadius:4, padding:'2px 7px', fontSize:11, fontWeight:500}}>{type || 'Арендатор'}</span>;
+  }
+
   return (
     <div>
       <div className="stats">
         <div className="stat"><div className="stat-label">Всего контактов</div><div className="stat-val purple">{contacts.length}</div></div>
         <div className="stat"><div className="stat-label">Показано</div><div className="stat-val">{filtered.length}</div></div>
-        <div className="stat"><div className="stat-label">Арендаторов</div><div className="stat-val">{tenants.length}</div></div>
-        <div className="stat"><div className="stat-label"></div><div className="stat-val"></div></div>
+        <div className="stat"><div className="stat-label">Арендаторов</div><div className="stat-val">{contacts.filter(c => isRenter(c)).length}</div></div>
+        <div className="stat"><div className="stat-label">Подрядчиков</div><div className="stat-val">{contacts.filter(c => !isRenter(c)).length}</div></div>
       </div>
 
       <div className="toolbar">
-        <input placeholder="Поиск по имени или телефону..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select value={selectedTenant} onChange={e => setSelectedTenant(e.target.value)}>
-          <option value="">Все арендаторы</option>
-          {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        <input placeholder="Поиск по имени, телефону, услугам..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select value={filterContactType} onChange={e => setFilterContactType(e.target.value)}>
+          <option value="">Все типы контактов</option>
+          {contactTypes.map(ct => <option key={ct.id} value={ct.name}>{ct.name}</option>)}
         </select>
-  <select value={filterObjectType} onChange={e => setFilterObjectType(e.target.value)}>
-  <option value="">Все типы объектов</option>
-  {[...new Set(objects.map(o => o.type).filter(Boolean))].sort().map(type => (
-    <option key={type} value={type}>{type}</option>
-  ))}
-</select>
+        <select value={filterObjectType} onChange={e => setFilterObjectType(e.target.value)}>
+          <option value="">Все типы объектов</option>
+          {[...new Set(objects.map(o => o.type).filter(Boolean))].sort().map(type => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
         {selectedTenant && (
-          <button className="btn-cancel" style={{padding:'6px 12px', fontSize:13}} onClick={() => { onNavigate('tenants', selectedTenant); }}>
+          <button className="btn-cancel" style={{padding:'6px 12px', fontSize:13}} onClick={() => onNavigate('tenants', selectedTenant)}>
             ← К арендатору
           </button>
         )}
@@ -182,26 +212,38 @@ const filtered = contacts.filter(c => {
             <thead>
               <tr>
                 <th>ФИО контакта</th>
+                <th>Тип</th>
                 <th>Телефон</th>
                 <th>Должность</th>
-                <th>Арендатор</th>
+                <th>Арендатор / Услуги</th>
+                <th>Цена</th>
+                <th>Дата актуализации</th>
                 <th>Email</th>
-<th>Комментарий</th>
                 <th style={{width:80}}>Действия</th>
               </tr>
             </thead>
             <tbody>
               {paginated.map(c => (
                 <tr key={c.id}>
-                  <td>{c.full_name || '—'}</td>
-                  <td>{c.phone ? <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()}>{c.phone}</a> : '—'}</td>
+                  <td style={{fontWeight:500}}>{c.full_name || '—'}</td>
+                  <td>{typeBadge(c.contact_type)}</td>
+                  <td>{c.phone ? <a href={`tel:${c.phone}`}>{c.phone}</a> : '—'}</td>
                   <td>{c.position || '—'}</td>
-                  <td onClick={() => onNavigate('tenants', c.tenant_id)} style={{cursor:'pointer', color:'#534AB7', textDecoration:'underline'}}>
-                    {getTenantName(c.tenant_id)}
+                  <td style={{fontSize:12}}>
+                    {isRenter(c)
+                      ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
+                          onClick={() => onNavigate('tenants', c.tenant_id)}>
+                          {getTenantName(c.tenant_id)}
+                        </span>
+                      : c.services || '—'
+                    }
                   </td>
-                  <td>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : '—'}</td>
-<td>{c.description || '—'}</td>
-                  <td onClick={e => e.stopPropagation()}>
+                  <td style={{fontSize:12}}>{!isRenter(c) ? (c.service_price || '—') : '—'}</td>
+                  <td style={{fontSize:12, color:'#888'}}>
+                    {c.actualization_date ? new Date(c.actualization_date).toLocaleDateString('ru-RU') : '—'}
+                  </td>
+                  <td style={{fontSize:12}}>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : '—'}</td>
+                  <td>
                     <button onClick={() => openEdit(c)} style={{background:'none', border:'none', cursor:'pointer', color:'#534AB7', marginRight:8}}>✎</button>
                     <button onClick={() => deleteContact(c.id)} style={{background:'none', border:'none', cursor:'pointer', color:'#A32D2D'}}>✕</button>
                   </td>
@@ -241,20 +283,60 @@ const filtered = contacts.filter(c => {
               {form.id ? 'Редактировать контакт' : 'Новый контакт'}
               <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
             </div>
-            <div className="form-group"><label>ФИО *</label><input value={form.full_name || ''} onChange={e => setForm({...form, full_name: e.target.value})} /></div>
-            <div className="form-grid">
-  <div className="form-group"><label>Телефон</label><input value={form.phone || ''} onChange={e => setForm({...form, phone: e.target.value})} /></div>
-  <div className="form-group"><label>Email</label><input type="email" value={form.email || ''} onChange={e => setForm({...form, email: e.target.value})} /></div>
-  <div className="form-group"><label>Должность</label><input value={form.position || ''} onChange={e => setForm({...form, position: e.target.value})} /></div>
-</div>
-            <div className="form-group"><label>Арендатор</label>
-              <select value={form.tenant_id || ''} onChange={e => setForm({...form, tenant_id: e.target.value})}>
-                <option value="">— Выберите арендатора —</option>
-                {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+
+            <div className="form-group"><label>Тип контакта</label>
+              <select value={form.contact_type || 'Арендатор'} onChange={e => setForm({...form, contact_type: e.target.value})}>
+                {contactTypes.map(ct => <option key={ct.id} value={ct.name}>{ct.name}</option>)}
               </select>
             </div>
-            <div className="form-group"><label>Описание</label><textarea rows={2} value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} /></div>
-            <div className="form-group"><label><input type="checkbox" checked={form.is_primary || false} onChange={e => setForm({...form, is_primary: e.target.checked})} /> Основной контакт</label></div>
+
+            <div className="form-group"><label>ФИО *</label>
+              <input value={form.full_name || ''} onChange={e => setForm({...form, full_name: e.target.value})} />
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group"><label>Телефон</label>
+                <input value={form.phone || ''} onChange={e => setForm({...form, phone: e.target.value})} />
+              </div>
+              <div className="form-group"><label>Email</label>
+                <input type="email" value={form.email || ''} onChange={e => setForm({...form, email: e.target.value})} />
+              </div>
+              <div className="form-group"><label>Должность</label>
+                <input value={form.position || ''} onChange={e => setForm({...form, position: e.target.value})} />
+              </div>
+            </div>
+
+            {isRenter(form) ? (
+              <div className="form-group"><label>Арендатор</label>
+                <select value={form.tenant_id || ''} onChange={e => setForm({...form, tenant_id: e.target.value})}>
+                  <option value="">— Выберите арендатора —</option>
+                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            ) : (
+              <>
+                <div className="form-group"><label>Услуги</label>
+                  <textarea rows={2} value={form.services || ''} onChange={e => setForm({...form, services: e.target.value})}
+                    placeholder="Описание услуг подрядчика..." />
+                </div>
+                <div className="form-grid">
+                  <div className="form-group"><label>Цена услуг</label>
+                    <input value={form.service_price || ''} onChange={e => setForm({...form, service_price: e.target.value})}
+                      placeholder="например: 5000 ₽/час" />
+                  </div>
+                  <div className="form-group"><label>Дата актуализации</label>
+                    <input type="date" value={form.actualization_date || ''} onChange={e => setForm({...form, actualization_date: e.target.value})} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="form-group"><label>Комментарий</label>
+              <textarea rows={2} value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})} />
+            </div>
+            <div className="form-group"><label>
+              <input type="checkbox" checked={form.is_primary || false} onChange={e => setForm({...form, is_primary: e.target.checked})} /> Основной контакт
+            </label></div>
             <div className="form-actions">
               <button className="btn-cancel" onClick={() => setShowForm(false)}>Отмена</button>
               <button className="btn-save" onClick={saveForm}>Сохранить</button>
