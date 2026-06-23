@@ -18,6 +18,8 @@ export default function Settings() {
   const [defaultContractTemplate, setDefaultContractTemplate] = useState('');
   const [savingDefaults, setSavingDefaults] = useState(false);
   const [showPaymentsTab, setShowPaymentsTab] = useState(false);
+  const [contactTypes, setContactTypes] = useState([]);
+const [newContactType, setNewContactType] = useState('');
   const fileRef = useRef();
   const [exportingBackup, setExportingBackup] = useState(false);
 
@@ -31,6 +33,7 @@ export default function Settings() {
     await fetchDocTypes();
     await fetchDefaults();
     await fetchItemTemplates();
+    await fetchContactTypes();
     setLoading(false);
   }
 
@@ -75,7 +78,37 @@ export default function Settings() {
     const data = await res.json();
     setItemTemplates(data.rows || []);
   }
+async function fetchContactTypes() {
+  const res = await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `SELECT * FROM contact_types ORDER BY created_at`, params: [] })
+  });
+  const data = await res.json();
+  setContactTypes(data.rows || []);
+}
 
+async function addContactType() {
+  if (!newContactType.trim()) return alert('Введите название типа');
+  await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `INSERT INTO contact_types (name) VALUES ($1) ON CONFLICT DO NOTHING`, params: [newContactType.trim()] })
+  });
+  setNewContactType('');
+  fetchContactTypes();
+}
+
+async function deleteContactType(id, name) {
+  if (['Арендатор'].includes(name)) return alert('Этот тип нельзя удалить');
+  if (!window.confirm(`Удалить тип "${name}"?`)) return;
+  await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `DELETE FROM contact_types WHERE id = $1`, params: [id] })
+  });
+  fetchContactTypes();
+}
   async function saveDefaults() {
     setSavingDefaults(true);
     await fetch('/api/db', {
@@ -393,7 +426,29 @@ async function exportBackup() {
           </table>
         )}
       </div>
-
+{/* Типы контактов */}
+<div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Типы контактов</div>
+<div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:24}}>
+  <div style={{display:'flex', gap:8, marginBottom:16}}>
+    <input value={newContactType} onChange={e => setNewContactType(e.target.value)}
+      placeholder="Новый тип контакта..."
+      style={{flex:1, padding:'7px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}
+      onKeyDown={e => { if(e.key === 'Enter') addContactType(); }}
+    />
+    <button className="btn-add" onClick={addContactType}>+ Добавить</button>
+  </div>
+  <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+    {contactTypes.map(ct => (
+      <div key={ct.id} style={{display:'flex', alignItems:'center', gap:6, background:'#f4f4f8', borderRadius:6, padding:'4px 10px', fontSize:13}}>
+        <span>{ct.name}</span>
+        {ct.name !== 'Арендатор' && (
+          <button onClick={() => deleteContactType(ct.id, ct.name)}
+            style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:12, padding:0}}>✕</button>
+        )}
+      </div>
+    ))}
+  </div>
+</div>
       {/* Типы документов */}
       <div style={{fontSize:13, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:10}}>Типы документов</div>
       <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, marginBottom:24}}>
