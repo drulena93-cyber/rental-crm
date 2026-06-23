@@ -178,10 +178,32 @@ export default function Contacts({ tenantId, onNavigate }) {
 
       <div className="toolbar">
         <input placeholder="Поиск по имени, телефону, услугам..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select value={filterContactType} onChange={e => setFilterContactType(e.target.value)}>
-          <option value="">Все типы контактов</option>
-          {contactTypes.map(ct => <option key={ct.id} value={ct.name}>{ct.name}</option>)}
-        </select>
+        <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
+  <button
+    onClick={() => setFilterContactType('')}
+    style={{
+      padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer', border:'1px solid #ddd',
+      background: filterContactType === '' ? '#534AB7' : '#f4f4f8',
+      color: filterContactType === '' ? '#fff' : '#555',
+      fontWeight: filterContactType === '' ? 500 : 400,
+    }}>
+    Все
+  </button>
+  {contactTypes.map(ct => (
+    <button key={ct.id}
+      onClick={() => setFilterContactType(filterContactType === ct.name ? '' : ct.name)}
+      style={{
+        padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer',
+        border: `1px solid ${filterContactType === ct.name ? '#534AB7' : '#ddd'}`,
+        background: filterContactType === ct.name ? '#534AB7' : '#f4f4f8',
+        color: filterContactType === ct.name ? '#fff' : '#555',
+        fontWeight: filterContactType === ct.name ? 500 : 400,
+        whiteSpace:'nowrap',
+      }}>
+      {ct.name}
+    </button>
+  ))}
+</div>
         <select value={filterObjectType} onChange={e => setFilterObjectType(e.target.value)}>
           <option value="">Все типы объектов</option>
           {[...new Set(objects.map(o => o.type).filter(Boolean))].sort().map(type => (
