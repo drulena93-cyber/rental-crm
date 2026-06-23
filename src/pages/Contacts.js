@@ -22,8 +22,8 @@ export default function Contacts({ tenantId, onNavigate }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [objects, setObjects] = useState([]);
   const [objectTenants, setObjectTenants] = useState([]);
-  const [sortField, setSortField] = useState('full_name');
-  const [sortDir, setSortDir] = useState('asc');
+  const [sortField, setSortField] = useState('created_at');
+const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => { fetchAll(false); }, []);
 
