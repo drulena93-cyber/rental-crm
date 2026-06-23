@@ -164,15 +164,20 @@ export default function Contacts({ tenantId, onNavigate }) {
   }
 
   async function saveForm() {
-    if (!form.full_name) return alert('Введите ФИО контакта');
-    if (form.id) {
-      await supabase.from('contacts').update(form).eq('id', form.id);
-    } else {
-      await supabase.from('contacts').insert(form);
-    }
-    setShowForm(false);
-    fetchAll(true);
+  if (!form.full_name) return alert('Введите ФИО контакта');
+  const data = {
+    ...form,
+    tenant_id: form.tenant_id || null,
+    actualization_date: form.actualization_date || null,
+  };
+  if (data.id) {
+    await supabase.from('contacts').update(data).eq('id', data.id);
+  } else {
+    await supabase.from('contacts').insert(data);
   }
+  setShowForm(false);
+  fetchAll(true);
+}
 
   async function deleteContact(id) {
     if (!window.confirm('Переместить контакт в корзину?')) return;
