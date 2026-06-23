@@ -22,6 +22,8 @@ export default function Contacts({ tenantId, onNavigate }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [objects, setObjects] = useState([]);
   const [objectTenants, setObjectTenants] = useState([]);
+  const [sortField, setSortField] = useState('full_name');
+  const [sortDir, setSortDir] = useState('asc');
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -121,6 +123,15 @@ export default function Contacts({ tenantId, onNavigate }) {
         !c.email?.toLowerCase().includes(search.toLowerCase()) &&
         !c.services?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
+  }).sort((a, b) => {
+    let va = a[sortField] ?? '';
+    let vb = b[sortField] ?? '';
+    if (sortField === 'actualization_date') {
+      return sortDir === 'asc' ? new Date(va) - new Date(vb) : new Date(vb) - new Date(va);
+    }
+    return sortDir === 'asc'
+      ? String(va).localeCompare(String(vb), 'ru')
+      : String(vb).localeCompare(String(va), 'ru');
   });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -128,14 +139,24 @@ export default function Contacts({ tenantId, onNavigate }) {
 
   const getTenantName = (id) => tenants.find(t => t.id === id)?.name || '—';
 
+  function handleSort(field) {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+  }
+
+  function sortIcon(field) {
+    if (sortField !== field) return <span style={{color:'#ccc', marginLeft:4}}>↕</span>;
+    return <span style={{marginLeft:4}}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
+
   function openAdd() {
-  setForm({ 
-    tenant_id: selectedTenant || '', 
-    is_primary: false, 
-    contact_type: filterContactType || 'Арендатор' 
-  });
-  setShowForm(true);
-}
+    setForm({
+      tenant_id: selectedTenant || '',
+      is_primary: false,
+      contact_type: filterContactType || 'Арендатор'
+    });
+    setShowForm(true);
+  }
 
   function openEdit(c) {
     setForm({ ...c });
@@ -171,6 +192,8 @@ export default function Contacts({ tenantId, onNavigate }) {
     return <span style={{background:s.bg, color:s.color, borderRadius:4, padding:'2px 7px', fontSize:11, fontWeight:500}}>{type || 'Арендатор'}</span>;
   }
 
+  const thStyle = { cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' };
+
   return (
     <div>
       <div className="stats">
@@ -183,31 +206,26 @@ export default function Contacts({ tenantId, onNavigate }) {
       <div className="toolbar">
         <input placeholder="Поиск по имени, телефону, услугам..." value={search} onChange={e => setSearch(e.target.value)} />
         <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
-  <button
-    onClick={() => setFilterContactType('')}
-    style={{
-      padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer', border:'1px solid #ddd',
-      background: filterContactType === '' ? '#534AB7' : '#f4f4f8',
-      color: filterContactType === '' ? '#fff' : '#555',
-      fontWeight: filterContactType === '' ? 500 : 400,
-    }}>
-    Все
-  </button>
-  {contactTypes.map(ct => (
-    <button key={ct.id}
-      onClick={() => setFilterContactType(filterContactType === ct.name ? '' : ct.name)}
-      style={{
-        padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer',
-        border: `1px solid ${filterContactType === ct.name ? '#534AB7' : '#ddd'}`,
-        background: filterContactType === ct.name ? '#534AB7' : '#f4f4f8',
-        color: filterContactType === ct.name ? '#fff' : '#555',
-        fontWeight: filterContactType === ct.name ? 500 : 400,
-        whiteSpace:'nowrap',
-      }}>
-      {ct.name}
-    </button>
-  ))}
-</div>
+          <button onClick={() => setFilterContactType('')}
+            style={{padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer', border:'1px solid #ddd',
+              background: filterContactType === '' ? '#534AB7' : '#f4f4f8',
+              color: filterContactType === '' ? '#fff' : '#555',
+              fontWeight: filterContactType === '' ? 500 : 400}}>
+            Все
+          </button>
+          {contactTypes.map(ct => (
+            <button key={ct.id}
+              onClick={() => setFilterContactType(filterContactType === ct.name ? '' : ct.name)}
+              style={{padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer',
+                border: `1px solid ${filterContactType === ct.name ? '#534AB7' : '#ddd'}`,
+                background: filterContactType === ct.name ? '#534AB7' : '#f4f4f8',
+                color: filterContactType === ct.name ? '#fff' : '#555',
+                fontWeight: filterContactType === ct.name ? 500 : 400,
+                whiteSpace:'nowrap'}}>
+              {ct.name}
+            </button>
+          ))}
+        </div>
         <select value={filterObjectType} onChange={e => setFilterObjectType(e.target.value)}>
           <option value="">Все типы объектов</option>
           {[...new Set(objects.map(o => o.type).filter(Boolean))].sort().map(type => (
@@ -237,14 +255,14 @@ export default function Contacts({ tenantId, onNavigate }) {
           <table>
             <thead>
               <tr>
-                <th>ФИО контакта</th>
-                <th>Тип</th>
-                <th>Телефон</th>
-                <th>Должность</th>
-                <th>Арендатор / Услуги</th>
-                <th>Цена</th>
-                <th>Дата актуализации</th>
-                <th>Email</th>
+                <th style={thStyle} onClick={() => handleSort('full_name')}>ФИО контакта{sortIcon('full_name')}</th>
+                <th style={thStyle} onClick={() => handleSort('contact_type')}>Тип{sortIcon('contact_type')}</th>
+                <th style={thStyle} onClick={() => handleSort('phone')}>Телефон{sortIcon('phone')}</th>
+                <th style={thStyle} onClick={() => handleSort('position')}>Должность{sortIcon('position')}</th>
+                <th style={thStyle} onClick={() => handleSort('services')}>Арендатор / Услуги{sortIcon('services')}</th>
+                <th style={thStyle} onClick={() => handleSort('service_price')}>Цена{sortIcon('service_price')}</th>
+                <th style={thStyle} onClick={() => handleSort('actualization_date')}>Дата актуализации{sortIcon('actualization_date')}</th>
+                <th style={thStyle} onClick={() => handleSort('email')}>Email{sortIcon('email')}</th>
                 <th style={{width:80}}>Действия</th>
               </tr>
             </thead>
