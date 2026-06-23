@@ -129,9 +129,13 @@ export default function Contacts({ tenantId, onNavigate }) {
   const getTenantName = (id) => tenants.find(t => t.id === id)?.name || '—';
 
   function openAdd() {
-    setForm({ tenant_id: selectedTenant || '', is_primary: false, contact_type: 'Арендатор' });
-    setShowForm(true);
-  }
+  setForm({ 
+    tenant_id: selectedTenant || '', 
+    is_primary: false, 
+    contact_type: filterContactType || 'Арендатор' 
+  });
+  setShowForm(true);
+}
 
   function openEdit(c) {
     setForm({ ...c });
