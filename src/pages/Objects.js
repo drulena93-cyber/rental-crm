@@ -401,13 +401,13 @@ export default function Objects({ onNavigate, highlightId }) {
     if (!objs.length) return;
     const rows = await dbQuery(`SELECT object_id, status FROM object_keys`);
     const map = {};
-    for (const r of rows) {
-      if (!map[r.object_id]) map[r.object_id] = { total: 0, вОфисе: 0, выдано: 0, утеряно: 0 };
-      map[r.object_id].total++;
-      if (r.status === 'У арендатора') map[r.object_id].уАрендатора = (map[r.object_id].уАрендатора || 0) + 1;
-if (r.status === 'В картотеке') map[r.object_id].вКартотеке = (map[r.object_id].вКартотеке || 0) + 1;
-if (r.status === 'Другое') map[r.object_id].другое = (map[r.object_id].другое || 0) + 1;
-    }
+for (const r of rows) {
+  if (!map[r.object_id]) map[r.object_id] = { total: 0, уАрендатора: 0, вКартотеке: 0, другое: 0 };
+  map[r.object_id].total++;
+  if (r.status === 'У арендатора') map[r.object_id].уАрендатора++;
+  if (r.status === 'В картотеке') map[r.object_id].вКартотеке++;
+  if (r.status === 'Другое') map[r.object_id].другое++;
+}
     setObjectKeys(map);
   }
 
