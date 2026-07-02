@@ -68,11 +68,11 @@ function KeysSection({ objectId }) {
   }
 
   const statusColor = (s) => {
-    if (s === 'В офисе') return { bg: '#EAF3DE', color: '#3B6D11' };
-    if (s === 'Выдан') return { bg: '#E6F1FB', color: '#185FA5' };
-    if (s === 'Утерян') return { bg: '#FCEBEB', color: '#A32D2D' };
-    return { bg: '#f4f4f8', color: '#555' };
-  };
+  if (s === 'У арендатора') return { bg: '#E6F1FB', color: '#185FA5' };
+  if (s === 'В картотеке') return { bg: '#EAF3DE', color: '#3B6D11' };
+  if (s === 'Другое') return { bg: '#FAEEDA', color: '#854F0B' };
+  return { bg: '#f4f4f8', color: '#555' };
+};
 
   const total = keys.length;
   const вОфисе = keys.filter(k => k.status === 'В офисе').length;
@@ -151,11 +151,11 @@ function KeysSection({ objectId }) {
             </div>
             <div className="form-group"><label style={{fontSize:12}}>Статус</label>
               <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
-                style={{width:'100%', padding:'5px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
-                <option>В офисе</option>
-                <option>Выдан</option>
-                <option>Утерян</option>
-              </select>
+  style={{width:'100%', padding:'5px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
+  <option>У арендатора</option>
+  <option>В картотеке</option>
+  <option>Другое</option>
+</select>
             </div>
             <div className="form-group"><label style={{fontSize:12}}>Дата выдачи</label>
               <input type="date" value={form.issued_date} onChange={e => setForm({...form, issued_date: e.target.value})}
