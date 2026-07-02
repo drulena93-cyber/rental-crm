@@ -62,7 +62,7 @@ function KeysSection({ objectId }) {
 
   function openAdd() {
     const nextNum = String((keys.length > 0 ? Math.max(...keys.map(k => parseInt(k.key_number) || 0)) : 0) + 1);
-    setForm({ key_number: nextNum, status: 'В офисе', issued_to: '', issued_date: '', comment: '' });
+    setForm({ key_number: nextNum, status: 'В картотеке', issued_to: '', issued_date: '', comment: '' });
     setEditingKey(null);
     setShowForm(true);
   }
@@ -75,9 +75,9 @@ function KeysSection({ objectId }) {
 };
 
   const total = keys.length;
-  const вОфисе = keys.filter(k => k.status === 'В офисе').length;
-  const выдано = keys.filter(k => k.status === 'Выдан').length;
-  const утеряно = keys.filter(k => k.status === 'Утерян').length;
+  const уАрендатора = keys.filter(k => k.status === 'У арендатора').length;
+const вКартотеке = keys.filter(k => k.status === 'В картотеке').length;
+const другое = keys.filter(k => k.status === 'Другое').length;
 
   return (
     <div className="linked-section">
@@ -93,9 +93,9 @@ function KeysSection({ objectId }) {
       {total > 0 && (
         <div style={{display:'flex', gap:12, fontSize:12, marginBottom:10, flexWrap:'wrap'}}>
           <span>🔑 Всего: <b>{total}</b></span>
-          <span style={{color:'#3B6D11'}}>🏢 В офисе: <b>{вОфисе}</b></span>
-          <span style={{color:'#185FA5'}}>👤 Выдано: <b>{выдано}</b></span>
-          {утеряно > 0 && <span style={{color:'#A32D2D'}}>⚠️ Утеряно: <b>{утеряно}</b></span>}
+          <span style={{color:'#185FA5'}}>👤 У арендатора: <b>{уАрендатора}</b></span>
+<span style={{color:'#3B6D11'}}>🗄 В картотеке: <b>{вКартотеке}</b></span>
+{другое > 0 && <span style={{color:'#854F0B'}}>📌 Другое: <b>{другое}</b></span>}
         </div>
       )}
 
