@@ -404,9 +404,9 @@ export default function Objects({ onNavigate, highlightId }) {
     for (const r of rows) {
       if (!map[r.object_id]) map[r.object_id] = { total: 0, вОфисе: 0, выдано: 0, утеряно: 0 };
       map[r.object_id].total++;
-      if (r.status === 'В офисе') map[r.object_id].вОфисе++;
-      if (r.status === 'Выдан') map[r.object_id].выдано++;
-      if (r.status === 'Утерян') map[r.object_id].утеряно++;
+      if (r.status === 'У арендатора') map[r.object_id].уАрендатора = (map[r.object_id].уАрендатора || 0) + 1;
+if (r.status === 'В картотеке') map[r.object_id].вКартотеке = (map[r.object_id].вКартотеке || 0) + 1;
+if (r.status === 'Другое') map[r.object_id].другое = (map[r.object_id].другое || 0) + 1;
     }
     setObjectKeys(map);
   }
@@ -494,12 +494,13 @@ export default function Objects({ onNavigate, highlightId }) {
     if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
     if (filterTenant && !getObjectTenants(o.id).find(ot => ot.tenant_id === filterTenant)) return false;
     if (filterKeys) {
-      const k = objectKeys[o.id];
-      if (filterKeys === 'есть' && !k) return false;
-      if (filterKeys === 'нет' && k) return false;
-      if (filterKeys === 'выдан' && (!k || k.выдано === 0)) return false;
-      if (filterKeys === 'утерян' && (!k || k.утеряно === 0)) return false;
-    }
+  const k = objectKeys[o.id];
+  if (filterKeys === 'есть' && !k) return false;
+  if (filterKeys === 'нет' && k) return false;
+  if (filterKeys === 'у_арендатора' && (!k || k.уАрендатора === 0)) return false;
+  if (filterKeys === 'в_картотеке' && (!k || k.вКартотеке === 0)) return false;
+  if (filterKeys === 'другое' && (!k || k.другое === 0)) return false;
+}
     return true;
   }).sort((a, b) => {
     let va = a[sortField], vb = b[sortField];
@@ -653,12 +654,13 @@ export default function Objects({ onNavigate, highlightId }) {
           <option value="да">Да</option><option value="нет">Нет</option>
         </select>
         <select value={filterKeys} onChange={e => setFilterKeys(e.target.value)}>
-          <option value="">Ключи: все</option>
-          <option value="есть">Есть ключи</option>
-          <option value="нет">Нет ключей</option>
-          <option value="выдан">Есть выданные</option>
-          <option value="утерян">Есть утерянные</option>
-        </select>
+  <option value="">Ключи: все</option>
+  <option value="есть">Есть ключи</option>
+  <option value="нет">Нет ключей</option>
+  <option value="у_арендатора">У арендатора</option>
+  <option value="в_картотеке">В картотеке</option>
+  <option value="другое">Другое</option>
+</select>
         {(filterStatus || filterFloor || filterType || filterShared || filterTenant || filterKeys || search) && (
           <button onClick={() => { setFilterStatus(''); setFilterFloor(''); setFilterType(''); setFilterShared(''); setFilterTenant(''); setFilterKeys(''); setSearch(''); }}
             style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
