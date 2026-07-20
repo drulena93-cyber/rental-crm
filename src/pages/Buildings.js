@@ -11,6 +11,202 @@ function getStatusStyle(status) {
   return STATUS_COLORS[status] || STATUS_COLORS['default'];
 }
 
+// ── Компонент ключей здания ───────────────────────────────────────────────
+function BuildingKeysSection({ buildingType }) {
+  const [keys, setKeys] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingKey, setEditingKey] = useState(null);
+  const [form, setForm] = useState({ key_number: '', status: 'В картотеке', issued_to: '', issued_date: '', comment: '' });
+
+  useEffect(() => { fetchKeys(); }, [buildingType]);
+
+  async function fetchKeys() {
+    setLoading(true);
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT * FROM object_keys WHERE building_type = $1 AND object_id IS NULL ORDER BY key_number::integer NULLS LAST, created_at`,
+        params: [buildingType]
+      })
+    });
+    const data = await res.json();
+    setKeys(data.rows || []);
+    setLoading(false);
+  }
+
+  async function saveKey() {
+    if (!form.key_number) return alert('Введите номер ключа');
+    if (editingKey) {
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `UPDATE object_keys SET key_number=$1, status=$2, issued_to=$3, issued_date=$4, comment=$5 WHERE id=$6`,
+          params: [form.key_number, form.status, form.issued_to || null, form.issued_date || null, form.comment || null, editingKey]
+        })
+      });
+    } else {
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `INSERT INTO object_keys (building_type, key_number, status, issued_to, issued_date, comment) VALUES ($1,$2,$3,$4,$5,$6)`,
+          params: [buildingType, form.key_number, form.status, form.issued_to || null, form.issued_date || null, form.comment || null]
+        })
+      });
+    }
+    setShowForm(false);
+    setEditingKey(null);
+    setForm({ key_number: '', status: 'В картотеке', issued_to: '', issued_date: '', comment: '' });
+    fetchKeys();
+  }
+
+  async function deleteKey(id) {
+    if (!window.confirm('Удалить ключ?')) return;
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `DELETE FROM object_keys WHERE id=$1`, params: [id] })
+    });
+    fetchKeys();
+  }
+
+  function openEdit(k) {
+    setForm({ key_number: k.key_number || '', status: k.status || 'В картотеке', issued_to: k.issued_to || '', issued_date: k.issued_date || '', comment: k.comment || '' });
+    setEditingKey(k.id);
+    setShowForm(true);
+  }
+
+  function openAdd() {
+    const nextNum = String((keys.length > 0 ? Math.max(...keys.map(k => parseInt(k.key_number) || 0)) : 0) + 1);
+    setForm({ key_number: nextNum, status: 'В картотеке', issued_to: '', issued_date: '', comment: '' });
+    setEditingKey(null);
+    setShowForm(true);
+  }
+
+  const statusColor = (s) => {
+    if (s === 'У арендатора') return { bg: '#E6F1FB', color: '#185FA5' };
+    if (s === 'В картотеке') return { bg: '#EAF3DE', color: '#3B6D11' };
+    if (s === 'Другое') return { bg: '#FAEEDA', color: '#854F0B' };
+    return { bg: '#f4f4f8', color: '#555' };
+  };
+
+  const уАрендатора = keys.filter(k => k.status === 'У арендатора').length;
+  const вКартотеке = keys.filter(k => k.status === 'В картотеке').length;
+  const другое = keys.filter(k => k.status === 'Другое').length;
+
+  return (
+    <div style={{marginTop:16, borderTop:'1px solid #e5e5e5', paddingTop:12}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+        <div style={{fontSize:12, fontWeight:600, color:'#534AB7'}}>🔑 Ключи здания</div>
+        <button onClick={openAdd}
+          style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'3px 10px', fontSize:11, cursor:'pointer'}}>
+          + Добавить
+        </button>
+      </div>
+
+      {/* Сводка */}
+      {keys.length > 0 && (
+        <div style={{display:'flex', gap:10, fontSize:11, marginBottom:8, flexWrap:'wrap'}}>
+          <span>🔑 Всего: <b>{keys.length}</b></span>
+          <span style={{color:'#185FA5'}}>👤 У арендатора: <b>{уАрендатора}</b></span>
+          <span style={{color:'#3B6D11'}}>🗄 В картотеке: <b>{вКартотеке}</b></span>
+          {другое > 0 && <span style={{color:'#854F0B'}}>📌 Другое: <b>{другое}</b></span>}
+        </div>
+      )}
+
+      {loading ? <div style={{fontSize:11, color:'#aaa'}}>Загрузка...</div> :
+       keys.length === 0 ? <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>Ключи не добавлены</div> : (
+        <table style={{fontSize:11, width:'100%', marginBottom:8}}>
+          <thead>
+            <tr>
+              <th style={{textAlign:'center', width:30}}>№</th>
+              <th>Статус</th>
+              <th>Выдан кому</th>
+              <th>Дата</th>
+              <th>Комментарий</th>
+              <th style={{width:50}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {keys.map(k => {
+              const st = statusColor(k.status);
+              return (
+                <tr key={k.id}>
+                  <td style={{textAlign:'center', fontWeight:600}}>{k.key_number}</td>
+                  <td>
+                    <span style={{background:st.bg, color:st.color, borderRadius:4, padding:'1px 6px', fontSize:10, fontWeight:500}}>
+                      {k.status}
+                    </span>
+                  </td>
+                  <td>{k.issued_to || '—'}</td>
+                  <td>{k.issued_date ? new Date(k.issued_date).toLocaleDateString('ru-RU') : '—'}</td>
+                  <td style={{color:'#888'}}>{k.comment || '—'}</td>
+                  <td>
+                    <button onClick={() => openEdit(k)}
+                      style={{background:'none', border:'none', color:'#534AB7', cursor:'pointer', marginRight:4, fontSize:11}}>✎</button>
+                    <button onClick={() => deleteKey(k.id)}
+                      style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:11}}>✕</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {showForm && (
+        <div style={{background:'#f0f0ff', borderRadius:8, padding:10, marginTop:8}}>
+          <div style={{fontSize:12, fontWeight:500, marginBottom:8}}>
+            {editingKey ? 'Редактировать ключ' : 'Новый ключ'}
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:6, marginBottom:6}}>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>№ ключа</div>
+              <input value={form.key_number} onChange={e => setForm({...form, key_number: e.target.value})}
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
+            </div>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Статус</div>
+              <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}}>
+                <option>У арендатора</option>
+                <option>В картотеке</option>
+                <option>Другое</option>
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Дата выдачи</div>
+              <input type="date" value={form.issued_date} onChange={e => setForm({...form, issued_date: e.target.value})}
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
+            </div>
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:8}}>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Выдан кому</div>
+              <input value={form.issued_to} onChange={e => setForm({...form, issued_to: e.target.value})}
+                placeholder="ФИО или организация"
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
+            </div>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Комментарий</div>
+              <input value={form.comment} onChange={e => setForm({...form, comment: e.target.value})}
+                placeholder="Необязательно..."
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
+            </div>
+          </div>
+          <div style={{display:'flex', gap:6}}>
+            <button className="btn-save" onClick={saveKey} style={{fontSize:12, padding:'5px 12px'}}>Сохранить</button>
+            <button className="btn-cancel" onClick={() => { setShowForm(false); setEditingKey(null); }} style={{fontSize:12, padding:'5px 12px'}}>Отмена</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Buildings({ onNavigate }) {
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -294,6 +490,7 @@ export default function Buildings({ onNavigate }) {
               );
             })()}
 
+            {/* Шахматка */}
             {(() => {
               const objs = buildings[selectedBuilding];
               const floors = getFloors(objs);
@@ -348,6 +545,9 @@ export default function Buildings({ onNavigate }) {
                 </>
               );
             })()}
+
+            {/* Ключи здания */}
+            <BuildingKeysSection buildingType={selectedBuilding} />
           </div>
         )}
       </div>
