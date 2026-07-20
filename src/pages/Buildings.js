@@ -390,7 +390,7 @@ export default function Buildings({ onNavigate }) {
         ))}
       </div>
 
-      <div style={{display:'grid', gridTemplateColumns: selectedBuilding ? '420px 1fr' : '1fr', gap:12, alignItems:'start'}}>
+      <div style={{display:'grid', gridTemplateColumns: selectedBuilding ? '1fr 1fr' : '1fr', gap:12, alignItems:'start'}}>
         <div style={{overflowX:'auto'}}>
           <table>
             <thead>
