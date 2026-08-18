@@ -60,29 +60,30 @@ const [sortDir, setSortDir] = useState('desc');
 
     forceRefresh ? setRefreshing(true) : setLoading(true);
 
-    const { data: cons } = await supabase.from('contacts').select('*').is('deleted_at', null).order('full_name');
-    const { data: tens } = await supabase.from('tenants').select('id, name').order('name');
-
-    const objRes = await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT id, name, type FROM objects WHERE deleted_at IS NULL`, params: [] })
-    });
+    const [consRes, tensRes, objRes, otRes, ctRes] = await Promise.all([
+      supabase.from('contacts').select('*').is('deleted_at', null).order('full_name'),
+      supabase.from('tenants').select('id, name').order('name'),
+      fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT id, name, type FROM objects WHERE deleted_at IS NULL`, params: [] })
+      }),
+      fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT object_id, tenant_id FROM object_tenants`, params: [] })
+      }),
+      fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT * FROM contact_types ORDER BY created_at`, params: [] })
+      })
+    ]);
+    const cons = consRes.data;
+    const tens = tensRes.data;
     const objData = await objRes.json();
     const objs = objData.rows || [];
-
-    const otRes = await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT object_id, tenant_id FROM object_tenants`, params: [] })
-    });
     const otData = await otRes.json();
-
-    const ctRes = await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT * FROM contact_types ORDER BY created_at`, params: [] })
-    });
     const ctData = await ctRes.json();
     const ctypes = ctData.rows || [];
 
@@ -198,45 +199,35 @@ const [sortDir, setSortDir] = useState('desc');
   }
 
   const thStyle = { cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' };
+  const PILL = {
+    purple: { bg:'#EDEAFB', border:'#C9BFF2', text:'#534AB7' },
+    green:  { bg:'#E1F3D8', border:'#B7DDA0', text:'#2F6B0C' },
+    red:    { bg:'#FBE1E1', border:'#EFB3B3', text:'#A32D2D' },
+    blue:   { bg:'#DCEBFA', border:'#A8CDEF', text:'#185FA5' },
+    amber:  { bg:'#FBEEDA', border:'#F0CE8E', text:'#8A5A0B' },
+    gray:   { bg:'#EDEDF2', border:'#D2D2DC', text:'#4a4a55' },
+  };
+  const statPill = (tone = 'gray') => {
+    const c = PILL[tone] || PILL.gray;
+    return { background:c.bg, border:`1px solid ${c.border}`, borderRadius:8, padding:'6px 12px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
+  };
+  const pillValue = (tone = 'gray') => ({ fontWeight:700, color:(PILL[tone] || PILL.gray).text });
+  const tagStyle = (active) => ({
+    background: active ? '#534AB7' : PILL.gray.bg,
+    color: active ? '#fff' : '#3f3f4a',
+    border: active ? '1px solid #534AB7' : `1px solid ${PILL.gray.border}`,
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+    boxShadow: active ? '0 1px 3px rgba(83,74,183,0.35)' : 'none'
+  });
 
   return (
     <div>
-      <div className="stats">
-        <div className="stat"><div className="stat-label">Всего контактов</div><div className="stat-val purple">{contacts.length}</div></div>
-        <div className="stat"><div className="stat-label">Показано</div><div className="stat-val">{filtered.length}</div></div>
-        <div className="stat"><div className="stat-label">Арендаторов</div><div className="stat-val">{contacts.filter(c => isRenter(c)).length}</div></div>
-        <div className="stat"><div className="stat-label">Подрядчиков</div><div className="stat-val">{contacts.filter(c => !isRenter(c)).length}</div></div>
-      </div>
-
-      <div className="toolbar">
-        <input placeholder="Поиск по имени, телефону, услугам..." value={search} onChange={e => setSearch(e.target.value)} />
-        <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
-          <button onClick={() => setFilterContactType('')}
-            style={{padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer', border:'1px solid #ddd',
-              background: filterContactType === '' ? '#534AB7' : '#f4f4f8',
-              color: filterContactType === '' ? '#fff' : '#555',
-              fontWeight: filterContactType === '' ? 500 : 400}}>
-            Все
-          </button>
-          {contactTypes.map(ct => (
-            <button key={ct.id}
-              onClick={() => setFilterContactType(filterContactType === ct.name ? '' : ct.name)}
-              style={{padding:'5px 12px', borderRadius:20, fontSize:12, cursor:'pointer',
-                border: `1px solid ${filterContactType === ct.name ? '#534AB7' : '#ddd'}`,
-                background: filterContactType === ct.name ? '#534AB7' : '#f4f4f8',
-                color: filterContactType === ct.name ? '#fff' : '#555',
-                fontWeight: filterContactType === ct.name ? 500 : 400,
-                whiteSpace:'nowrap'}}>
-              {ct.name}
-            </button>
-          ))}
-        </div>
-        <select value={filterObjectType} onChange={e => setFilterObjectType(e.target.value)}>
-          <option value="">Все типы объектов</option>
-          {[...new Set(objects.map(o => o.type).filter(Boolean))].sort().map(type => (
-            <option key={type} value={type}>{type}</option>
-          ))}
-        </select>
+      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
+        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{contacts.length}</span></div>
+        <div style={statPill('blue')}><span style={{color:'#6b6b75'}}>Показано:</span><span style={pillValue('blue')}>{filtered.length}</span></div>
+        <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Арендаторов:</span><span style={pillValue('green')}>{contacts.filter(c => isRenter(c)).length}</span></div>
+        <div style={statPill('amber')}><span style={{color:'#6b6b75'}}>Подрядчиков:</span><span style={pillValue('amber')}>{contacts.filter(c => !isRenter(c)).length}</span></div>
+        <input placeholder="Поиск по имени, телефону, услугам..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:200}} />
         {selectedTenant && (
           <button className="btn-cancel" style={{padding:'6px 12px', fontSize:13}} onClick={() => onNavigate('tenants', selectedTenant)}>
             ← К арендатору
@@ -247,6 +238,26 @@ const [sortDir, setSortDir] = useState('desc');
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
+      </div>
+
+      <div style={{display:'flex', flexWrap:'wrap', gap:6, marginTop:10, marginBottom:6, alignItems:'center'}}>
+        <span style={{fontSize:12, color:'#888', marginRight:2}}>Тип контакта:</span>
+        <button onClick={() => setFilterContactType('')} style={tagStyle(filterContactType === '')}>Все</button>
+        {contactTypes.map(ct => (
+          <button key={ct.id} onClick={() => setFilterContactType(filterContactType === ct.name ? '' : ct.name)} style={tagStyle(filterContactType === ct.name)}>
+            {ct.name}
+          </button>
+        ))}
+      </div>
+
+      <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
+        <span style={{fontSize:12, color:'#888', marginRight:2}}>Тип объекта:</span>
+        <button onClick={() => setFilterObjectType('')} style={tagStyle(filterObjectType === '')}>Все объекты</button>
+        {[...new Set(objects.map(o => o.type).filter(Boolean))].sort().map(type => (
+          <button key={type} onClick={() => setFilterObjectType(filterObjectType === type ? '' : type)} style={tagStyle(filterObjectType === type)}>
+            {type}
+          </button>
+        ))}
       </div>
 
       {lastUpdated && (
