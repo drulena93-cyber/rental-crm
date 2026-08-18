@@ -83,6 +83,7 @@ export default function App() {
               ← Назад
             </button>
           )}
+          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
           <button className={tab === 'buildings' ? 'active' : ''} onClick={() => handleTabClick('buildings')}>🏢 Здания</button>
           <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
           <button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
@@ -92,7 +93,6 @@ export default function App() {
           {showPaymentsTab && <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>}
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
-          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
         </nav>
       </div>
       <div className="content">
