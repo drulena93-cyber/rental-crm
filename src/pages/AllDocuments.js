@@ -52,20 +52,19 @@ export default function AllDocuments({ onNavigate }) {
 
     forceRefresh ? setRefreshing(true) : setLoading(true);
 
-    const { data: docs } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
-    const { data: tens } = await supabase.from('tenants').select('id, name').is('deleted_at', null).order('name');
-
-    // Загружаем типы из настроек
-    let types = ['Договор', 'Акт', 'Счёт', 'Доверенность', 'Скан паспорта', 'Другое'];
-    try {
-      const dtRes = await fetch('/api/db', {
+    const defaultTypes = ['Договор', 'Акт', 'Счёт', 'Доверенность', 'Скан паспорта', 'Другое'];
+    const [docsRes, tensRes, dtRes] = await Promise.all([
+      supabase.from('documents').select('*').order('created_at', { ascending: false }),
+      supabase.from('tenants').select('id, name').is('deleted_at', null).order('name'),
+      fetch('/api/db', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: `SELECT name FROM document_types ORDER BY created_at`, params: [] })
-      });
-      const dtData = await dtRes.json();
-      if (dtData.rows?.length) types = dtData.rows.map(r => r.name);
-    } catch(e) {}
+      }).then(r => r.json()).catch(() => null)
+    ]);
+    const docs = docsRes.data;
+    const tens = tensRes.data;
+    const types = dtRes?.rows?.length ? dtRes.rows.map(r => r.name) : defaultTypes;
 
     const now = Date.now();
     localStorage.setItem(CACHE_KEY, JSON.stringify({ docs, tens, types }));
@@ -161,22 +160,36 @@ export default function AllDocuments({ onNavigate }) {
   }
 
   const thStyle = { cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' };
+  const PILL = {
+    purple: { bg:'#EDEAFB', border:'#C9BFF2', text:'#534AB7' },
+    green:  { bg:'#E1F3D8', border:'#B7DDA0', text:'#2F6B0C' },
+    red:    { bg:'#FBE1E1', border:'#EFB3B3', text:'#A32D2D' },
+    blue:   { bg:'#DCEBFA', border:'#A8CDEF', text:'#185FA5' },
+    amber:  { bg:'#FBEEDA', border:'#F0CE8E', text:'#8A5A0B' },
+    gray:   { bg:'#EDEDF2', border:'#D2D2DC', text:'#4a4a55' },
+  };
+  const statPill = (tone = 'gray') => {
+    const c = PILL[tone] || PILL.gray;
+    return { background:c.bg, border:`1px solid ${c.border}`, borderRadius:8, padding:'6px 12px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
+  };
+  const pillValue = (tone = 'gray') => ({ fontWeight:700, color:(PILL[tone] || PILL.gray).text });
+  const tagStyle = (active) => ({
+    background: active ? '#534AB7' : PILL.gray.bg,
+    color: active ? '#fff' : '#3f3f4a',
+    border: active ? '1px solid #534AB7' : `1px solid ${PILL.gray.border}`,
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+    boxShadow: active ? '0 1px 3px rgba(83,74,183,0.35)' : 'none'
+  });
 
   return (
     <div>
-      <div className="stats">
-        <div className="stat"><div className="stat-label">Всего документов</div><div className="stat-val purple">{documents.length}</div></div>
-        <div className="stat"><div className="stat-label">Договоров</div><div className="stat-val blue">{documents.filter(d => d.type === 'Договор').length}</div></div>
-        <div className="stat"><div className="stat-label">Актов</div><div className="stat-val green">{documents.filter(d => d.type === 'Акт').length}</div></div>
-        <div className="stat"><div className="stat-label">Счетов</div><div className="stat-val">{documents.filter(d => d.type === 'Счёт').length}</div></div>
-      </div>
-
-      <div className="toolbar">
-        <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select value={filterType} onChange={e => setFilterType(e.target.value)}>
-          <option value="">Все типы</option>
-          {docTypes.map(dt => <option key={dt}>{dt}</option>)}
-        </select>
+      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
+        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{documents.length}</span></div>
+        <div style={statPill('blue')}><span style={{color:'#6b6b75'}}>Договоров:</span><span style={pillValue('blue')}>{documents.filter(d => d.type === 'Договор').length}</span></div>
+        <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Актов:</span><span style={pillValue('green')}>{documents.filter(d => d.type === 'Акт').length}</span></div>
+        <div style={statPill('amber')}><span style={{color:'#6b6b75'}}>Счетов:</span><span style={pillValue('amber')}>{documents.filter(d => d.type === 'Счёт').length}</span></div>
+        <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>Показано:</span><span style={pillValue('gray')}>{filtered.length}</span></div>
+        <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
           <option value="">Все арендаторы</option>
           {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -186,15 +199,23 @@ export default function AllDocuments({ onNavigate }) {
         <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
           title="Дата до" style={{padding:'7px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
         {(search || filterType || filterTenant || filterDateFrom || filterDateTo) && (
-  <button onClick={() => { setSearch(''); setFilterType(''); setFilterTenant(''); setFilterDateFrom(''); setFilterDateTo(''); }}
-    style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
-    ✕ Сбросить фильтры
-  </button>
-)}
-            <button onClick={() => fetchAll(true)} disabled={refreshing}
+          <button onClick={() => { setSearch(''); setFilterType(''); setFilterTenant(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+            style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+            ✕ Сбросить фильтры
+          </button>
+        )}
+        <button onClick={() => fetchAll(true)} disabled={refreshing}
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
+      </div>
+
+      <div style={{display:'flex', flexWrap:'wrap', gap:6, marginTop:10, marginBottom:12, alignItems:'center'}}>
+        <span style={{fontSize:12, color:'#888', marginRight:2}}>Тип:</span>
+        <button onClick={() => setFilterType('')} style={tagStyle(filterType === '')}>Все типы</button>
+        {docTypes.map(dt => (
+          <button key={dt} onClick={() => setFilterType(filterType === dt ? '' : dt)} style={tagStyle(filterType === dt)}>{dt}</button>
+        ))}
       </div>
 
       {lastUpdated && (
