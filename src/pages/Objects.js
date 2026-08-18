@@ -608,14 +608,20 @@ for (const r of rows) {
   }
 
   const thStyle = {cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'};
+  const tagStyle = (active) => ({
+    background: active ? '#534AB7' : '#f4f4f8',
+    color: active ? '#fff' : '#555',
+    border: active ? '1px solid #534AB7' : '1px solid #ddd',
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap'
+  });
 
   return (
     <div>
-      <div className="stats">
-        <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{objects.length}</div></div>
-        <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{rented.length}</div></div>
-        <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{free.length}</div></div>
-        <div className="stat" style={{cursor:'pointer'}} onClick={() => { setEditingNote(true); setNoteValue(note); }}>
+      <div className="stats" style={{display:'flex', flexWrap:'wrap', gap:8}}>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Всего объектов</div><div className="stat-val purple" style={{fontSize:18}}>{objects.length}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Сдано</div><div className="stat-val green" style={{fontSize:18}}>{rented.length}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Свободно</div><div className="stat-val red" style={{fontSize:18}}>{free.length}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto', cursor:'pointer'}} onClick={() => { setEditingNote(true); setNoteValue(note); }}>
           <div className="stat-label">📝 Заметка {!editingNote && <span style={{fontSize:10,color:'#aaa'}}>✎</span>}</div>
           {editingNote ? (
             <textarea autoFocus value={noteValue} onChange={e => setNoteValue(e.target.value)}
@@ -636,10 +642,6 @@ for (const r of rows) {
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Все статусы</option>
           <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
-        </select>
-        <select value={filterType} onChange={e => setFilterType(e.target.value)}>
-          <option value="">Все типы</option>
-          {types.map(t => <option key={t}>{t}</option>)}
         </select>
         <select value={filterFloor} onChange={e => setFilterFloor(e.target.value)}>
           <option value="">Все этажи</option>
@@ -672,6 +674,14 @@ for (const r of rows) {
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
+      </div>
+
+      <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
+        <span style={{fontSize:12, color:'#888', marginRight:2}}>Тип:</span>
+        <button onClick={() => setFilterType('')} style={tagStyle(filterType === '')}>Все типы</button>
+        {types.map(t => (
+          <button key={t} onClick={() => setFilterType(t)} style={tagStyle(filterType === t)}>{t}</button>
+        ))}
       </div>
 
       {lastUpdated && <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}</div>}
@@ -796,15 +806,15 @@ for (const r of rows) {
                           </span>
                         ) : '—'}
                       </td>
-                      <td onClick={e => e.stopPropagation()}>
+                      <td onClick={e => e.stopPropagation()} style={{minWidth:220}}>
                         {editingField === o.id+'_comments' ? (
-                          <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
+                          <textarea autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
                             onBlur={() => quickUpdate(o.id, 'comments', editingValue)}
-                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'comments', editingValue); if(e.key==='Escape') setEditingField(null); }}
-                            style={{width:120}} />
+                            onKeyDown={e => { if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); quickUpdate(o.id, 'comments', editingValue); } if(e.key==='Escape') setEditingField(null); }}
+                            style={{width:220, resize:'vertical', minHeight:32}} />
                         ) : (
-                          <span style={{cursor:'pointer', maxWidth:120, display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}
-                            title={o.comments} onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
+                          <span style={{cursor:'pointer', display:'block', whiteSpace:'pre-wrap', wordBreak:'break-word'}}
+                            onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
                             {o.comments || '— ✎'}
                           </span>
                         )}
