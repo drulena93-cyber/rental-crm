@@ -1,21 +1,43 @@
 import React, { useState, useEffect } from 'react';
 
 export default function Analytics({ onNavigate }) {
+  const CACHE_KEY = 'analytics_cache';
+  const CACHE_TIME_KEY = 'analytics_cache_time';
+  const CACHE_TTL = 60 * 1000;
+
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [objectTenants, setObjectTenants] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [expandedType, setExpandedType] = useState(null);
   const [expandedMonth, setExpandedMonth] = useState(null);
   const [showStartTooltip, setShowStartTooltip] = useState(false);
   const [monthSortField, setMonthSortField] = useState({});
   const [monthSortDir, setMonthSortDir] = useState({});
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(false); }, []);
 
-  async function fetchAll() {
-    setLoading(true);
+  async function fetchAll(forceRefresh = false) {
+    if (!forceRefresh) {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+      if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
+        try {
+          const { objs, tens, ot, hist } = JSON.parse(cached);
+          setObjects(objs || []);
+          setTenants(tens || []);
+          setObjectTenants(ot || []);
+          setHistory(hist || []);
+          setLastUpdated(new Date(parseInt(cachedTime)));
+          setLoading(false);
+          return;
+        } catch (e) {}
+      }
+    }
+    forceRefresh ? setRefreshing(true) : setLoading(true);
     try {
       const [objRes, tenRes, otRes, histRes] = await Promise.all([
         fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
@@ -30,12 +52,19 @@ export default function Analytics({ onNavigate }) {
       const [objData, tenData, otData, histData] = await Promise.all([
         objRes.json(), tenRes.json(), otRes.json(), histRes.json()
       ]);
+      const now = Date.now();
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        objs: objData.rows || [], tens: tenData.rows || [], ot: otData.rows || [], hist: histData.rows || []
+      }));
+      localStorage.setItem(CACHE_TIME_KEY, String(now));
       setObjects(objData.rows || []);
       setTenants(tenData.rows || []);
       setObjectTenants(otData.rows || []);
       setHistory(histData.rows || []);
+      setLastUpdated(new Date(now));
     } catch(e) { console.error(e); }
     setLoading(false);
+    setRefreshing(false);
   }
 
   if (loading) return <p>Загрузка...</p>;
@@ -132,17 +161,28 @@ export default function Analytics({ onNavigate }) {
   return (
     <div>
       {/* ── Сводка ── */}
-      <div className="stats" style={{marginBottom:8, gridTemplateColumns:'repeat(5, 1fr)'}}>
-        <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{учитываемые.length}</div></div>
-        <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{сдано.length}</div></div>
-        <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{свободно.length}</div></div>
-        <div className="stat"><div className="stat-label">Заполненность</div><div className="stat-val blue">{заполненность}%</div></div>
-        <div className="stat"><div className="stat-label">Активных арендаторов</div><div className="stat-val">{активные.length}</div></div>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, marginBottom:8}}>
+        <div className="stats" style={{margin:0, flex:1, gridTemplateColumns:'repeat(5, 1fr)'}}>
+          <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{учитываемые.length}</div></div>
+          <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{сдано.length}</div></div>
+          <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{свободно.length}</div></div>
+          <div className="stat"><div className="stat-label">Заполненность</div><div className="stat-val blue">{заполненность}%</div></div>
+          <div className="stat"><div className="stat-label">Активных арендаторов</div><div className="stat-val">{активные.length}</div></div>
+        </div>
+        <button onClick={() => fetchAll(true)} disabled={refreshing}
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+          {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
+        </button>
       </div>
+      {lastUpdated && (
+        <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>
+          Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
+        </div>
+      )}
 
       {/* ── Типы арендаторов ── */}
       {sectionTitle('Типы арендаторов')}
-      <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:8}}>
+      <div style={{display:'flex', flexWrap:'wrap', gap:10, marginBottom:8}}>
         {[
           { label: 'ИП', list: ип, color: '#185FA5', bg: '#E6F1FB' },
           { label: 'ООО / Юр. лица', list: ооо, color: '#854F0B', bg: '#FAEEDA' },
@@ -150,13 +190,14 @@ export default function Analytics({ onNavigate }) {
         ].map(item => (
           <div key={item.label}
             onClick={() => setExpandedType(expandedType === item.label ? null : item.label)}
-            style={{background:'#fff', border:`1px solid ${item.color}`, borderRadius:10, padding:16, cursor:'pointer'}}>
-            <div style={{fontSize:13, color:item.color, fontWeight:600, marginBottom:4}}>{item.label}</div>
-            <div style={{fontSize:28, fontWeight:700, color:item.color}}>{item.list.length}</div>
-            <div style={{fontSize:11, color:'#aaa', marginTop:4}}>
-              {активные.length ? Math.round(item.list.length / активные.length * 100) : 0}% от активных
+            style={{background:'#fff', border:`1px solid ${item.color}`, borderRadius:8, padding:'10px 14px', cursor:'pointer', display:'flex', alignItems:'center', gap:10, minWidth:180}}>
+            <div style={{fontSize:22, fontWeight:700, color:item.color}}>{item.list.length}</div>
+            <div>
+              <div style={{fontSize:12, color:item.color, fontWeight:600}}>{item.label}</div>
+              <div style={{fontSize:10, color:'#aaa'}}>
+                {активные.length ? Math.round(item.list.length / активные.length * 100) : 0}% от активных · {expandedType === item.label ? 'скрыть' : 'список'}
+              </div>
             </div>
-            <div style={{fontSize:11, color:item.color, marginTop:6}}>{expandedType === item.label ? '▲ Скрыть' : '▼ Показать список'}</div>
           </div>
         ))}
       </div>
@@ -260,6 +301,9 @@ export default function Analytics({ onNavigate }) {
                                   <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'obj')}>
                                     Объект{monthSortIcon(`in_${i}`, 'obj')}
                                   </th>
+                                  <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'building')}>
+                                    Здание{monthSortIcon(`in_${i}`, 'building')}
+                                  </th>
                                   <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'contract_start')}>
                                     Дата въезда{monthSortIcon(`in_${i}`, 'contract_start')}
                                   </th>
@@ -270,6 +314,7 @@ export default function Analytics({ onNavigate }) {
                                   if (f === 'name') return t.name;
                                   if (f === 'type') return t.type;
                                   if (f === 'obj') return objectTenants.filter(ot => ot.tenant_id === t.id).map(ot => objects.find(o => o.id === ot.object_id)?.name).filter(Boolean).join(', ');
+                                  if (f === 'building') return objectTenants.filter(ot => ot.tenant_id === t.id).map(ot => objects.find(o => o.id === ot.object_id)?.type).filter(Boolean).join(', ');
                                   if (f === 'contract_start') return t.contract_start;
                                   return '';
                                 }).map(t => {
@@ -289,6 +334,9 @@ export default function Analytics({ onNavigate }) {
                                             </span>
                                           ) : null;
                                         })}
+                                      </td>
+                                      <td style={{fontSize:11, color:'#888'}}>
+                                        {[...new Set(tenantOts.map(ot => objects.find(o => o.id === ot.object_id)?.type).filter(Boolean))].join(', ') || '—'}
                                       </td>
                                       <td>{t.contract_start ? new Date(t.contract_start).toLocaleDateString('ru-RU') : '—'}</td>
                                     </tr>
@@ -311,6 +359,9 @@ export default function Analytics({ onNavigate }) {
                                   <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'tenant_name')}>
                                     Арендатор{monthSortIcon(`out_${i}`, 'tenant_name')}
                                   </th>
+                                  <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'tenant_type')}>
+                                    Тип{monthSortIcon(`out_${i}`, 'tenant_type')}
+                                  </th>
                                   <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'obj_name')}>
                                     Объект{monthSortIcon(`out_${i}`, 'obj_name')}
                                   </th>
@@ -326,15 +377,18 @@ export default function Analytics({ onNavigate }) {
                                 {sortList(row.выехавшие, `out_${i}`, (h, f) => {
                                   const obj = objects.find(o => o.id === h.object_id);
                                   if (f === 'tenant_name') return h.tenant_name;
+                                  if (f === 'tenant_type') return tenants.find(t => t.id === h.tenant_id)?.type;
                                   if (f === 'obj_name') return obj?.name;
                                   if (f === 'obj_type') return obj?.type;
                                   if (f === 'date_to') return h.date_to;
                                   return '';
                                 }).map((h, hi) => {
                                   const obj = objects.find(o => o.id === h.object_id);
+                                  const tenantType = tenants.find(t => t.id === h.tenant_id)?.type;
                                   return (
                                     <tr key={hi}>
                                       <td>{h.tenant_name || '—'}</td>
+                                      <td>{tenantType || '—'}</td>
                                       <td>
                                         {obj ? (
                                           <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
