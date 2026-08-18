@@ -9,6 +9,7 @@ import AllDocuments from './pages/AllDocuments';
 import InvoiceGeneration from './pages/InvoiceGeneration';
 import Payments from './pages/Payments';
 import Buildings from './pages/Buildings';
+import { CHANGELOG } from './changelogData';
 import './App.css';
 
 export default function App() {
@@ -18,6 +19,21 @@ export default function App() {
   const [generationData, setGenerationData] = useState(null);
   const [navStack, setNavStack] = useState([]);
   const [showPaymentsTab, setShowPaymentsTab] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [seenCount, setSeenCount] = useState(() => parseInt(localStorage.getItem('changelog_seen_count') || '0'));
+
+  const unreadCount = Math.max(0, CHANGELOG.length - seenCount);
+
+  function toggleChangelog() {
+    setShowChangelog(v => {
+      const next = !v;
+      if (next) {
+        localStorage.setItem('changelog_seen_count', String(CHANGELOG.length));
+        setSeenCount(CHANGELOG.length);
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetch('/api/db', {
@@ -83,7 +99,6 @@ export default function App() {
               ← Назад
             </button>
           )}
-          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
           <button className={tab === 'buildings' ? 'active' : ''} onClick={() => handleTabClick('buildings')}>🏢 Здания</button>
           <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
           <button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
@@ -93,6 +108,66 @@ export default function App() {
           {showPaymentsTab && <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>}
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
+          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
+          <div style={{position:'relative', marginLeft:4}}>
+            <button onClick={toggleChangelog}
+              title="История изменений"
+              style={{
+                position:'relative', background: showChangelog ? '#EDEAFB' : 'transparent',
+                border:'1px solid #ddd', borderRadius:6, padding:'6px 10px', fontSize:15, cursor:'pointer', lineHeight:1
+              }}>
+              🔔
+              {unreadCount > 0 && (
+                <span style={{
+                  position:'absolute', top:-5, right:-5, background:'#A32D2D', color:'#fff',
+                  borderRadius:10, fontSize:10, fontWeight:700, minWidth:16, height:16,
+                  display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px', lineHeight:1
+                }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {showChangelog && (
+              <>
+                <div onClick={() => setShowChangelog(false)}
+                  style={{position:'fixed', inset:0, zIndex:40}} />
+                <div style={{
+                  position:'absolute', top:'calc(100% + 6px)', right:0, width:380, maxHeight:440,
+                  background:'#fff', border:'1px solid #e5e5ea', borderRadius:10,
+                  boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, overflow:'hidden',
+                  display:'flex', flexDirection:'column'
+                }}>
+                  <div style={{padding:'12px 16px', borderBottom:'1px solid #eee', fontWeight:600, fontSize:13, color:'#333'}}>
+                    🔔 История изменений
+                  </div>
+                  <div style={{overflowY:'auto', padding:'8px 0'}}>
+                    {(() => {
+                      const reversed = [...CHANGELOG].reverse();
+                      return reversed.map((entry, idx) => {
+                        const showDateHeader = idx === 0 || reversed[idx - 1].date !== entry.date;
+                        return (
+                          <div key={entry.id}>
+                            {showDateHeader && (
+                              <div style={{padding:'8px 16px 4px', fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'0.03em'}}>
+                                {entry.date}
+                              </div>
+                            )}
+                            <div style={{padding:'6px 16px', fontSize:13, color:'#333', lineHeight:1.4}}>
+                              {entry.text}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                    {CHANGELOG.length === 0 && (
+                      <div style={{padding:'20px 16px', textAlign:'center', color:'#aaa', fontSize:13}}>Пока нет записей</div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </nav>
       </div>
       <div className="content">
