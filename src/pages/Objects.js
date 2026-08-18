@@ -609,36 +609,21 @@ for (const r of rows) {
 
   const thStyle = {cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'};
   const tagStyle = (active) => ({
-    background: active ? '#534AB7' : '#f4f4f8',
-    color: active ? '#fff' : '#555',
-    border: active ? '1px solid #534AB7' : '1px solid #ddd',
-    borderRadius: 16, padding: '5px 12px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap'
+    background: active ? '#534AB7' : '#e9ebf3',
+    color: active ? '#fff' : '#3f3f4a',
+    border: active ? '1px solid #534AB7' : '1px solid #c2c6d6',
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap'
   });
+  const statPill = { background:'#f4f4f8', border:'1px solid #e5e5ea', borderRadius:8, padding:'6px 10px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
 
   return (
     <div>
-      <div className="stats" style={{display:'flex', flexWrap:'wrap', gap:8}}>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Всего объектов</div><div className="stat-val purple" style={{fontSize:18}}>{objects.length}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Сдано</div><div className="stat-val green" style={{fontSize:18}}>{rented.length}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Свободно</div><div className="stat-val red" style={{fontSize:18}}>{free.length}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto', cursor:'pointer'}} onClick={() => { setEditingNote(true); setNoteValue(note); }}>
-          <div className="stat-label">📝 Заметка {!editingNote && <span style={{fontSize:10,color:'#aaa'}}>✎</span>}</div>
-          {editingNote ? (
-            <textarea autoFocus value={noteValue} onChange={e => setNoteValue(e.target.value)}
-              onBlur={async () => { await supabase.from('settings').update({value: noteValue}).eq('id','objects_note'); setNote(noteValue); setEditingNote(false); }}
-              onKeyDown={e => { if(e.key==='Escape') setEditingNote(false); }}
-              style={{width:'100%',fontSize:13,border:'1px solid #ddd',borderRadius:6,padding:6,resize:'none',height:60}}
-              onClick={e => e.stopPropagation()} />
-          ) : (
-            <div style={{fontSize:13,color:note?'#1a1a1a':'#aaa',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
-              {note || 'Нажмите чтобы добавить заметку...'}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="toolbar">
-        <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
+        <div style={statPill}><span style={{color:'#888'}}>Всего:</span><span style={{fontWeight:600, color:'#534AB7'}}>{objects.length}</span></div>
+        <div style={statPill}><span style={{color:'#888'}}>Сдано:</span><span style={{fontWeight:600, color:'#3B6D11'}}>{rented.length}</span></div>
+        <div style={statPill}><span style={{color:'#888'}}>Своб.:</span><span style={{fontWeight:600, color:'#A32D2D'}}>{free.length}</span></div>
+        <div style={statPill}><span style={{color:'#888'}}>Показано:</span><span style={{fontWeight:600, color:'#185FA5'}}>{filtered.length}</span></div>
+        <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Все статусы</option>
           <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
@@ -674,6 +659,21 @@ for (const r of rows) {
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
+      </div>
+
+      <div className="stat" style={{padding:'8px 12px', marginBottom:12, cursor:'pointer'}} onClick={() => { setEditingNote(true); setNoteValue(note); }}>
+        <div className="stat-label">📝 Заметка {!editingNote && <span style={{fontSize:10,color:'#aaa'}}>✎</span>}</div>
+        {editingNote ? (
+          <textarea autoFocus value={noteValue} onChange={e => setNoteValue(e.target.value)}
+            onBlur={async () => { await supabase.from('settings').update({value: noteValue}).eq('id','objects_note'); setNote(noteValue); setEditingNote(false); }}
+            onKeyDown={e => { if(e.key==='Escape') setEditingNote(false); }}
+            style={{width:'100%',fontSize:13,border:'1px solid #ddd',borderRadius:6,padding:6,resize:'none',height:60}}
+            onClick={e => e.stopPropagation()} />
+        ) : (
+          <div style={{fontSize:13,color:note?'#1a1a1a':'#aaa',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
+            {note || 'Нажмите чтобы добавить заметку...'}
+          </div>
+        )}
       </div>
 
       <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
