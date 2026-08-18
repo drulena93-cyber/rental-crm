@@ -401,22 +401,21 @@ const getTenantObjects = (tenantId) => {
   const btnStyle = { background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 10px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap', height:36 };
   const thStyle = { cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' };
   const tagStyle = (active) => ({
-    background: active ? '#534AB7' : '#f4f4f8',
-    color: active ? '#fff' : '#555',
-    border: active ? '1px solid #534AB7' : '1px solid #ddd',
-    borderRadius: 16, padding: '5px 12px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap'
+    background: active ? '#534AB7' : '#e9ebf3',
+    color: active ? '#fff' : '#3f3f4a',
+    border: active ? '1px solid #534AB7' : '1px solid #c2c6d6',
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: active ? 500 : 500, cursor: 'pointer', whiteSpace: 'nowrap'
   });
+  const statPill = { background:'#f4f4f8', border:'1px solid #e5e5ea', borderRadius:8, padding:'6px 10px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
 
   return (
     <div>
-      <div className="stats" style={{display:'flex', flexWrap:'wrap', gap:8}}>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Всего арендаторов</div><div className="stat-val purple" style={{fontSize:18}}>{tenants.length}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Активных</div><div className="stat-val green" style={{fontSize:18}}>{active.length}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>С объектом</div><div className="stat-val" style={{fontSize:18}}>{withObj.length}</div></div>
-      </div>
-
-      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center'}}>
-        <input placeholder="Поиск по имени..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
+        <div style={statPill}><span style={{color:'#888'}}>Всего:</span><span style={{fontWeight:600, color:'#534AB7'}}>{tenants.length}</span></div>
+        <div style={statPill}><span style={{color:'#888'}}>Активных:</span><span style={{fontWeight:600, color:'#3B6D11'}}>{active.length}</span></div>
+        <div style={statPill}><span style={{color:'#888'}}>С объектом:</span><span style={{fontWeight:600}}>{withObj.length}</span></div>
+        <div style={statPill}><span style={{color:'#888'}}>Показано:</span><span style={{fontWeight:600, color:'#185FA5'}}>{filtered.length}</span></div>
+        <input placeholder="Поиск по имени..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">Все типы</option>
           <option>ФИЗ.ЛИЦО</option><option>ЮРИД.ЛИЦО</option><option>ИП</option><option>Не указан</option>
