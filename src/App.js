@@ -141,26 +141,27 @@ export default function App() {
                   <div style={{padding:'12px 16px', borderBottom:'1px solid #eee', fontWeight:600, fontSize:13, color:'#333'}}>
                     🔔 История изменений
                   </div>
-                  <div style={{overflowY:'auto', padding:'8px 0'}}>
-                    {(() => {
-                      const reversed = [...CHANGELOG].reverse();
-                      return reversed.map((entry, idx) => {
-                        const showDateHeader = idx === 0 || reversed[idx - 1].date !== entry.date;
-                        return (
-                          <div key={entry.id}>
-                            {showDateHeader && (
-                              <div style={{padding:'8px 16px 4px', fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'0.03em'}}>
-                                {entry.date}
-                              </div>
-                            )}
-                            <div style={{padding:'6px 16px', fontSize:13, color:'#333', lineHeight:1.4}}>
+                  <div style={{overflowY:'auto', padding:'8px 0', minHeight:40}}>
+                    {Array.isArray(CHANGELOG) && CHANGELOG.length > 0 ? (
+                      Object.entries(
+                        [...CHANGELOG].reverse().reduce((groups, entry) => {
+                          if (!groups[entry.date]) groups[entry.date] = [];
+                          groups[entry.date].push(entry);
+                          return groups;
+                        }, {})
+                      ).map(([date, entries]) => (
+                        <div key={date}>
+                          <div style={{padding:'8px 16px 4px', fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'0.03em'}}>
+                            {date}
+                          </div>
+                          {entries.map(entry => (
+                            <div key={entry.id} style={{padding:'6px 16px', fontSize:13, color:'#333', lineHeight:1.4}}>
                               {entry.text}
                             </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                    {CHANGELOG.length === 0 && (
+                          ))}
+                        </div>
+                      ))
+                    ) : (
                       <div style={{padding:'20px 16px', textAlign:'center', color:'#aaa', fontSize:13}}>Пока нет записей</div>
                     )}
                   </div>
