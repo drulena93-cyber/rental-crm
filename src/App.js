@@ -9,7 +9,7 @@ import AllDocuments from './pages/AllDocuments';
 import InvoiceGeneration from './pages/InvoiceGeneration';
 import Payments from './pages/Payments';
 import Buildings from './pages/Buildings';
-import { CHANGELOG } from './changelogData';
+import CHANGELOG from './changelogData';
 import './App.css';
 
 export default function App() {
