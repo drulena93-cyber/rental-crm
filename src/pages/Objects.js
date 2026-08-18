@@ -327,9 +327,6 @@ export default function Objects({ onNavigate, highlightId }) {
   const [editingStatus, setEditingStatus] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [editingValue, setEditingValue] = useState('');
-  const [note, setNote] = useState('');
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteValue, setNoteValue] = useState('');
   const [sortField, setSortField] = useState(() => localStorage.getItem('objects_sortField') || 'name');
   const [sortDir, setSortDir] = useState(() => localStorage.getItem('objects_sortDir') || 'asc');
   const [showTenantsModal, setShowTenantsModal] = useState(false);
@@ -367,11 +364,10 @@ export default function Objects({ onNavigate, highlightId }) {
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
         try {
-          const { objs, tens, ot, noteVal } = JSON.parse(cached);
+          const { objs, tens, ot } = JSON.parse(cached);
           setObjects(objs || []);
           setTenants(tens || []);
           setObjectTenants(ot || []);
-          setNote(noteVal || '');
           setLastUpdated(new Date(parseInt(cachedTime)));
           setLoading(false);
           await fetchAllKeys(objs || []);
@@ -382,15 +378,13 @@ export default function Objects({ onNavigate, highlightId }) {
     forceRefresh ? setRefreshing(true) : setLoading(true);
     const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
     const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
-    const { data: noteData } = await supabase.from('settings').select('value').eq('id', 'objects_note').single();
     const ot = await dbQuery(`SELECT ot.*, t.name as tenant_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id WHERE t.deleted_at IS NULL`);
     const now = Date.now();
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ objs, tens, ot, noteVal: noteData?.value || '' }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ objs, tens, ot }));
     localStorage.setItem(CACHE_TIME_KEY, String(now));
     setObjects(objs || []);
     setTenants(tens || []);
     setObjectTenants(ot || []);
-    setNote(noteData?.value || '');
     setLastUpdated(new Date(now));
     setLoading(false);
     setRefreshing(false);
@@ -609,20 +603,32 @@ for (const r of rows) {
 
   const thStyle = {cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'};
   const tagStyle = (active) => ({
-    background: active ? '#534AB7' : '#e9ebf3',
+    background: active ? '#534AB7' : PILL.gray.bg,
     color: active ? '#fff' : '#3f3f4a',
-    border: active ? '1px solid #534AB7' : '1px solid #c2c6d6',
-    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap'
+    border: active ? '1px solid #534AB7' : `1px solid ${PILL.gray.border}`,
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+    boxShadow: active ? '0 1px 3px rgba(83,74,183,0.35)' : 'none'
   });
-  const statPill = { background:'#f4f4f8', border:'1px solid #e5e5ea', borderRadius:8, padding:'6px 10px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
+  const PILL = {
+    purple: { bg:'#EDEAFB', border:'#C9BFF2', text:'#534AB7' },
+    green:  { bg:'#E1F3D8', border:'#B7DDA0', text:'#2F6B0C' },
+    red:    { bg:'#FBE1E1', border:'#EFB3B3', text:'#A32D2D' },
+    blue:   { bg:'#DCEBFA', border:'#A8CDEF', text:'#185FA5' },
+    gray:   { bg:'#EDEDF2', border:'#D2D2DC', text:'#4a4a55' },
+  };
+  const statPill = (tone = 'gray') => {
+    const c = PILL[tone] || PILL.gray;
+    return { background:c.bg, border:`1px solid ${c.border}`, borderRadius:8, padding:'6px 12px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
+  };
+  const pillValue = (tone = 'gray') => ({ fontWeight:700, color:(PILL[tone] || PILL.gray).text });
 
   return (
     <div>
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
-        <div style={statPill}><span style={{color:'#888'}}>Всего:</span><span style={{fontWeight:600, color:'#534AB7'}}>{objects.length}</span></div>
-        <div style={statPill}><span style={{color:'#888'}}>Сдано:</span><span style={{fontWeight:600, color:'#3B6D11'}}>{rented.length}</span></div>
-        <div style={statPill}><span style={{color:'#888'}}>Своб.:</span><span style={{fontWeight:600, color:'#A32D2D'}}>{free.length}</span></div>
-        <div style={statPill}><span style={{color:'#888'}}>Показано:</span><span style={{fontWeight:600, color:'#185FA5'}}>{filtered.length}</span></div>
+        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{objects.length}</span></div>
+        <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Сдано:</span><span style={pillValue('green')}>{rented.length}</span></div>
+        <div style={statPill('red')}><span style={{color:'#6b6b75'}}>Своб.:</span><span style={pillValue('red')}>{free.length}</span></div>
+        <div style={statPill('blue')}><span style={{color:'#6b6b75'}}>Показано:</span><span style={pillValue('blue')}>{filtered.length}</span></div>
         <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Все статусы</option>
@@ -659,21 +665,6 @@ for (const r of rows) {
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
-      </div>
-
-      <div className="stat" style={{padding:'8px 12px', marginBottom:12, cursor:'pointer'}} onClick={() => { setEditingNote(true); setNoteValue(note); }}>
-        <div className="stat-label">📝 Заметка {!editingNote && <span style={{fontSize:10,color:'#aaa'}}>✎</span>}</div>
-        {editingNote ? (
-          <textarea autoFocus value={noteValue} onChange={e => setNoteValue(e.target.value)}
-            onBlur={async () => { await supabase.from('settings').update({value: noteValue}).eq('id','objects_note'); setNote(noteValue); setEditingNote(false); }}
-            onKeyDown={e => { if(e.key==='Escape') setEditingNote(false); }}
-            style={{width:'100%',fontSize:13,border:'1px solid #ddd',borderRadius:6,padding:6,resize:'none',height:60}}
-            onClick={e => e.stopPropagation()} />
-        ) : (
-          <div style={{fontSize:13,color:note?'#1a1a1a':'#aaa',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
-            {note || 'Нажмите чтобы добавить заметку...'}
-          </div>
-        )}
       </div>
 
       <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
