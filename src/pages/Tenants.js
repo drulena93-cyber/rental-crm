@@ -71,6 +71,7 @@ export default function Tenants({ onNavigate, highlightId, showPayments }) {
   const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('tenants_filterStatus') || 'Активный');
   const [filterShared, setFilterShared] = useState(() => localStorage.getItem('tenants_filterShared') || '');
   const [filterObject, setFilterObject] = useState(() => localStorage.getItem('tenants_filterObject') || '');
+  const [filterFloor, setFilterFloor] = useState(() => localStorage.getItem('tenants_filterFloor') || '');
   const [sortField, setSortField] = useState(() => localStorage.getItem('tenants_sortField') || 'created_at');
   const [sortDir, setSortDir] = useState(() => localStorage.getItem('tenants_sortDir') || 'desc');
   const [selected, setSelected] = useState(null);
@@ -108,11 +109,12 @@ export default function Tenants({ onNavigate, highlightId, showPayments }) {
   }, [selected]);
 
   useEffect(() => { localStorage.setItem('tenants_page', String(page)); }, [page]);
-  useEffect(() => { setPage(1); }, [search, filterType, filterStatus, filterShared, filterObject]);
+  useEffect(() => { setPage(1); }, [search, filterType, filterStatus, filterShared, filterObject, filterFloor]);
   useEffect(() => { localStorage.setItem('tenants_filterType', filterType); }, [filterType]);
   useEffect(() => { localStorage.setItem('tenants_filterStatus', filterStatus); }, [filterStatus]);
   useEffect(() => { localStorage.setItem('tenants_filterShared', filterShared); }, [filterShared]);
   useEffect(() => { localStorage.setItem('tenants_filterObject', filterObject); }, [filterObject]);
+  useEffect(() => { localStorage.setItem('tenants_filterFloor', filterFloor); }, [filterFloor]);
   useEffect(() => { localStorage.setItem('tenants_sortField', sortField); }, [sortField]);
   useEffect(() => { localStorage.setItem('tenants_sortDir', sortDir); }, [sortDir]);
 
@@ -239,6 +241,11 @@ setObjectTenants(otData.rows || []);
       const tenantObj = objects.find(o => o.id === t.object_id);
       if (!tenantObj || tenantObj.type !== filterObject) return false;
     }
+    if (filterFloor) {
+      const ids = objectTenants.filter(ot => ot.tenant_id === t.id).map(ot => ot.object_id);
+      const tenantFloorObjs = objects.filter(o => ids.includes(o.id));
+      if (!tenantFloorObjs.some(o => String(o.floor) === String(filterFloor))) return false;
+    }
     return true;
   }).sort((a, b) => {
     let va = a[sortField], vb = b[sortField];
@@ -253,13 +260,8 @@ setObjectTenants(otData.rows || []);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const active = tenants.filter(t => t.status === 'Активный');
   const withObj = tenants.filter(t => t.object_id);
+  const floors = [...new Set(objects.map(o => o.floor).filter(f => f !== null && f !== undefined && f !== ''))].sort((a,b)=>a-b);
   const today = new Date();
-  const expiring = tenants.filter(t => {
-    if (!t.contract_end) return false;
-    const d = new Date(t.contract_end);
-    const diff = (d - today) / (1000 * 60 * 60 * 24);
-    return diff >= 0 && diff <= 30;
-  });
 
   async function quickUpdateStatus(id, status) {
     await supabase.from('tenants').update({ status }).eq('id', id);
@@ -320,7 +322,8 @@ setObjectTenants(otData.rows || []);
     if (!form.name) return alert('Введите имя арендатора');
     if (form.id) {
       const oldTenant = tenants.find(t => t.id === form.id);
-      if (oldTenant?.object_id && oldTenant.object_id !== form.object_id) {
+      const objectChanged = (oldTenant?.object_id || null) !== (form.object_id || null);
+      if (objectChanged && oldTenant?.object_id) {
         await fetch('/api/db', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -331,7 +334,7 @@ setObjectTenants(otData.rows || []);
         });
       }
       await supabase.from('tenants').update(form).eq('id', form.id);
-      if (form.object_id) {
+      if (objectChanged && form.object_id) {
         await fetch('/api/db', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -397,23 +400,22 @@ const getTenantObjects = (tenantId) => {
   const isFiz = form.type === 'ФИЗ.ЛИЦО';
   const btnStyle = { background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'0 10px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap', height:36 };
   const thStyle = { cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' };
+  const tagStyle = (active) => ({
+    background: active ? '#534AB7' : '#f4f4f8',
+    color: active ? '#fff' : '#555',
+    border: active ? '1px solid #534AB7' : '1px solid #ddd',
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap'
+  });
 
   return (
     <div>
-      {expiring.length > 0 && (
-        <div className="alert">
-          ⚠️ Истекает договор в ближайшие 30 дней: {expiring.map(t => `${t.name} (${daysLeft(t.contract_end)} дн.)`).join(', ')}
-        </div>
-      )}
-
-      <div className="stats">
-        <div className="stat"><div className="stat-label">Всего арендаторов</div><div className="stat-val purple">{tenants.length}</div></div>
-        <div className="stat"><div className="stat-label">Активных</div><div className="stat-val green">{active.length}</div></div>
-        <div className="stat"><div className="stat-label">С объектом</div><div className="stat-val">{withObj.length}</div></div>
-        <div className="stat"><div className="stat-label">Истекает скоро</div><div className="stat-val red">{expiring.length}</div></div>
+      <div className="stats" style={{display:'flex', flexWrap:'wrap', gap:8}}>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Всего арендаторов</div><div className="stat-val purple" style={{fontSize:18}}>{tenants.length}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Активных</div><div className="stat-val green" style={{fontSize:18}}>{active.length}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>С объектом</div><div className="stat-val" style={{fontSize:18}}>{withObj.length}</div></div>
       </div>
 
-      <div className="toolbar">
+      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center'}}>
         <input placeholder="Поиск по имени..." value={search} onChange={e => setSearch(e.target.value)} />
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">Все типы</option>
@@ -423,18 +425,16 @@ const getTenantObjects = (tenantId) => {
           <option value="">Все статусы</option>
           <option>Активный</option><option>Неактивный</option><option>В работе</option><option>Съехал</option><option>Не указан</option>
         </select>
-        <select value={filterObject} onChange={e => setFilterObject(e.target.value)}>
-          <option value="">Все объекты</option>
-          {[...new Set(objects.map(o => o.type).filter(Boolean))].map(type => (
-            <option key={type} value={type}>{type}</option>
-          ))}
-        </select>
         <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
           <option value="">Совместное: все</option>
           <option value="да">Да</option><option value="нет">Нет</option>
         </select>
-        {(filterType || filterStatus || filterShared || filterObject || search) && (
-          <button onClick={() => { setFilterType(''); setFilterStatus(''); setFilterShared(''); setFilterObject(''); setSearch(''); }}
+        <select value={filterFloor} onChange={e => setFilterFloor(e.target.value)}>
+          <option value="">Все этажи</option>
+          {floors.map(f => <option key={f} value={f}>{f} этаж</option>)}
+        </select>
+        {(filterType || filterStatus || filterShared || filterObject || filterFloor || search) && (
+          <button onClick={() => { setFilterType(''); setFilterStatus(''); setFilterShared(''); setFilterObject(''); setFilterFloor(''); setSearch(''); }}
             style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
             ✕ Сбросить фильтры
           </button>
@@ -444,6 +444,14 @@ const getTenantObjects = (tenantId) => {
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
+      </div>
+
+      <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
+        <span style={{fontSize:12, color:'#888', marginRight:2}}>Объект:</span>
+        <button onClick={() => setFilterObject('')} style={tagStyle(filterObject === '')}>Все объекты</button>
+        {[...new Set(objects.map(o => o.type).filter(Boolean))].map(type => (
+          <button key={type} onClick={() => setFilterObject(type)} style={tagStyle(filterObject === type)}>{type}</button>
+        ))}
       </div>
 
       {lastUpdated && (
@@ -462,7 +470,6 @@ const getTenantObjects = (tenantId) => {
                 <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
                 <th style={thStyle} onClick={() => handleSort('activity')}>Вид деятельности{sortIcon('activity')}</th>
                 <th style={thStyle} onClick={() => handleSort('object_id')}>Объект{sortIcon('object_id')}</th>
-                <th style={thStyle} onClick={() => handleSort('contract_end')}>Окончание договора{sortIcon('contract_end')}</th>
                 <th>В счёт</th>
                 <th style={thStyle} onClick={() => handleSort('updated_at')}>Изменён{sortIcon('updated_at')}</th>
                 <th>Контакты</th>
@@ -472,7 +479,6 @@ const getTenantObjects = (tenantId) => {
             <tbody>
               {paginated.map(t => {
                 const obj = getObject(t.object_id);
-                const days = daysLeft(t.contract_end);
                 return (
                   <tr key={t.id} onClick={e => { if (e.target.type === 'checkbox') return; setSelected(t); }}>
                     <td>{t.name}</td>
@@ -503,12 +509,6 @@ const getTenantObjects = (tenantId) => {
     );
   })()}
 </td>
-                    <td>{t.contract_end ? (
-                      <span style={{color: days <= 30 ? '#A32D2D' : 'inherit'}}>
-                        {new Date(t.contract_end).toLocaleDateString('ru-RU')}
-                        {days <= 30 && ` (${days} дн.)`}
-                      </span>
-                    ) : '—'}</td>
                     <td onClick={e => e.stopPropagation()} style={{textAlign:'center'}}>
   <button
     onClick={async e => {
