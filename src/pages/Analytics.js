@@ -289,22 +289,22 @@ export default function Analytics({ onNavigate }) {
                             <div style={{fontSize:12, fontWeight:600, color:'#3B6D11', marginBottom:6}}>
                               ✅ Въехали ({row.въехавшие.length})
                             </div>
-                            <table style={{width:'100%', fontSize:12}}>
+                            <table style={{width:'100%', fontSize:12, tableLayout:'fixed'}}>
                               <thead>
                                 <tr>
-                                  <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'name')}>
+                                  <th style={{...thSort, width:'22%'}} onClick={() => handleMonthSort(`in_${i}`, 'name')}>
                                     Арендатор{monthSortIcon(`in_${i}`, 'name')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'type')}>
+                                  <th style={{...thSort, width:'12%'}} onClick={() => handleMonthSort(`in_${i}`, 'type')}>
                                     Тип{monthSortIcon(`in_${i}`, 'type')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'obj')}>
+                                  <th style={{...thSort, width:'28%'}} onClick={() => handleMonthSort(`in_${i}`, 'obj')}>
                                     Объект{monthSortIcon(`in_${i}`, 'obj')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'building')}>
+                                  <th style={{...thSort, width:'16%'}} onClick={() => handleMonthSort(`in_${i}`, 'building')}>
                                     Здание{monthSortIcon(`in_${i}`, 'building')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`in_${i}`, 'contract_start')}>
+                                  <th style={{...thSort, width:'22%'}} onClick={() => handleMonthSort(`in_${i}`, 'contract_start')}>
                                     Дата въезда{monthSortIcon(`in_${i}`, 'contract_start')}
                                   </th>
                                 </tr>
@@ -353,22 +353,22 @@ export default function Analytics({ onNavigate }) {
                             <div style={{fontSize:12, fontWeight:600, color:'#A32D2D', marginBottom:6}}>
                               ❌ Выехали ({row.выехавшие.length})
                             </div>
-                            <table style={{width:'100%', fontSize:12}}>
+                            <table style={{width:'100%', fontSize:12, tableLayout:'fixed'}}>
                               <thead>
                                 <tr>
-                                  <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'tenant_name')}>
+                                  <th style={{...thSort, width:'22%'}} onClick={() => handleMonthSort(`out_${i}`, 'tenant_name')}>
                                     Арендатор{monthSortIcon(`out_${i}`, 'tenant_name')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'tenant_type')}>
+                                  <th style={{...thSort, width:'12%'}} onClick={() => handleMonthSort(`out_${i}`, 'tenant_type')}>
                                     Тип{monthSortIcon(`out_${i}`, 'tenant_type')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'obj_name')}>
+                                  <th style={{...thSort, width:'28%'}} onClick={() => handleMonthSort(`out_${i}`, 'obj_name')}>
                                     Объект{monthSortIcon(`out_${i}`, 'obj_name')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'obj_type')}>
+                                  <th style={{...thSort, width:'16%'}} onClick={() => handleMonthSort(`out_${i}`, 'obj_type')}>
                                     Здание{monthSortIcon(`out_${i}`, 'obj_type')}
                                   </th>
-                                  <th style={thSort} onClick={() => handleMonthSort(`out_${i}`, 'date_to')}>
+                                  <th style={{...thSort, width:'22%'}} onClick={() => handleMonthSort(`out_${i}`, 'date_to')}>
                                     Дата выезда{monthSortIcon(`out_${i}`, 'date_to')}
                                   </th>
                                 </tr>
