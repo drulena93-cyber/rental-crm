@@ -127,50 +127,57 @@ export default function App() {
                 </span>
               )}
             </button>
-
-            {showChangelog && (
-              <>
-                <div onClick={() => setShowChangelog(false)}
-                  style={{position:'fixed', inset:0, zIndex:40}} />
-                <div style={{
-                  position:'absolute', top:'calc(100% + 6px)', right:0, width:380, maxHeight:440,
-                  background:'#fff', border:'1px solid #e5e5ea', borderRadius:10,
-                  boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, overflow:'hidden',
-                  display:'flex', flexDirection:'column'
-                }}>
-                  <div style={{padding:'12px 16px', borderBottom:'1px solid #eee', fontWeight:600, fontSize:13, color:'#333'}}>
-                    🔔 История изменений
-                  </div>
-                  <div style={{overflowY:'auto', padding:'8px 0', minHeight:40}}>
-                    {Array.isArray(CHANGELOG) && CHANGELOG.length > 0 ? (
-                      Object.entries(
-                        [...CHANGELOG].reverse().reduce((groups, entry) => {
-                          if (!groups[entry.date]) groups[entry.date] = [];
-                          groups[entry.date].push(entry);
-                          return groups;
-                        }, {})
-                      ).map(([date, entries]) => (
-                        <div key={date}>
-                          <div style={{padding:'8px 16px 4px', fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'0.03em'}}>
-                            {date}
-                          </div>
-                          {entries.map(entry => (
-                            <div key={entry.id} style={{padding:'6px 16px', fontSize:13, color:'#333', lineHeight:1.4}}>
-                              {entry.text}
-                            </div>
-                          ))}
-                        </div>
-                      ))
-                    ) : (
-                      <div style={{padding:'20px 16px', textAlign:'center', color:'#aaa', fontSize:13}}>Пока нет записей</div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         </nav>
       </div>
+
+      {showChangelog && (
+        <div className="modal-overlay" onClick={() => setShowChangelog(false)}>
+          <div className="modal" style={{width:640, maxHeight:'82vh', display:'flex', flexDirection:'column', padding:0}} onClick={e => e.stopPropagation()}>
+            <div className="modal-title" style={{padding:'18px 24px', margin:0, borderBottom:'1px solid #eee'}}>
+              🔔 История изменений
+              <button className="modal-close" onClick={() => setShowChangelog(false)}>✕ Закрыть</button>
+            </div>
+            <div style={{overflowY:'auto', padding:'8px 24px 20px'}}>
+              {Array.isArray(CHANGELOG) && CHANGELOG.length > 0 ? (
+                Object.entries(
+                  [...CHANGELOG].reverse().reduce((groups, entry) => {
+                    if (!groups[entry.date]) groups[entry.date] = [];
+                    groups[entry.date].push(entry);
+                    return groups;
+                  }, {})
+                ).map(([date, entries]) => (
+                  <div key={date} style={{marginTop:18}}>
+                    <div style={{
+                      fontSize:12, fontWeight:700, color:'#534AB7', textTransform:'uppercase',
+                      letterSpacing:'0.04em', marginBottom:10, paddingBottom:6, borderBottom:'2px solid #EDEAFB'
+                    }}>
+                      {date}
+                    </div>
+                    {entries.map(entry => {
+                      const colonIdx = entry.text.indexOf(':');
+                      const hasPrefix = colonIdx > 0 && colonIdx < 30;
+                      const prefix = hasPrefix ? entry.text.slice(0, colonIdx) : null;
+                      const rest = hasPrefix ? entry.text.slice(colonIdx + 1).trim() : entry.text;
+                      return (
+                        <div key={entry.id} style={{display:'flex', gap:10, padding:'8px 0', alignItems:'flex-start'}}>
+                          <div style={{width:6, height:6, borderRadius:'50%', background:'#534AB7', marginTop:7, flexShrink:0}} />
+                          <div style={{fontSize:14, color:'#333', lineHeight:1.5}}>
+                            {prefix && <span style={{fontWeight:600, color:'#534AB7'}}>{prefix}: </span>}
+                            {rest}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              ) : (
+                <div style={{padding:'30px 0', textAlign:'center', color:'#aaa', fontSize:13}}>Пока нет записей</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="content">
         {tab === 'buildings' && <Buildings onNavigate={handleNavigate} />}
         {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} />}
