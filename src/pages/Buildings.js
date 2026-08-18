@@ -208,8 +208,14 @@ function BuildingKeysSection({ buildingType }) {
 }
 
 export default function Buildings({ onNavigate }) {
+  const CACHE_KEY = 'buildings_cache';
+  const CACHE_TIME_KEY = 'buildings_cache_time';
+  const CACHE_TTL = 60 * 1000;
+
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterAreaMin, setFilterAreaMin] = useState('');
@@ -220,36 +226,57 @@ export default function Buildings({ onNavigate }) {
   const [editingBuilding, setEditingBuilding] = useState(null);
   const [editingValue, setEditingValue] = useState('');
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(false); }, []);
 
-  async function fetchAll() {
-    setLoading(true);
-    const res = await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `SELECT o.*, t.name as tenant_name
-                FROM objects o
-                LEFT JOIN object_tenants ot ON ot.object_id = o.id
-                LEFT JOIN tenants t ON t.id = ot.tenant_id
-                WHERE o.deleted_at IS NULL AND o.type IS NOT NULL
-                ORDER BY o.type, o.floor NULLS LAST, o.name`,
-        params: []
+  async function fetchAll(forceRefresh = false) {
+    if (!forceRefresh) {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+      if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
+        try {
+          const { objs, bldMap } = JSON.parse(cached);
+          setObjects(objs || []);
+          setBuildingNames2(bldMap || {});
+          setLastUpdated(new Date(parseInt(cachedTime)));
+          setLoading(false);
+          return;
+        } catch (e) {}
+      }
+    }
+    forceRefresh ? setRefreshing(true) : setLoading(true);
+    const [res, bldRes] = await Promise.all([
+      fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `SELECT o.*, t.name as tenant_name
+                  FROM objects o
+                  LEFT JOIN object_tenants ot ON ot.object_id = o.id
+                  LEFT JOIN tenants t ON t.id = ot.tenant_id
+                  WHERE o.deleted_at IS NULL AND o.type IS NOT NULL
+                  ORDER BY o.type, o.floor NULLS LAST, o.name`,
+          params: []
+        })
+      }),
+      fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT * FROM buildings ORDER BY display_name`, params: [] })
       })
-    });
+    ]);
     const data = await res.json();
-    setObjects(data.rows || []);
-
-    const bldRes = await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `SELECT * FROM buildings ORDER BY display_name`, params: [] })
-    });
     const bldData = await bldRes.json();
     const bldMap = {};
     for (const b of bldData.rows || []) bldMap[b.type] = b;
+
+    const now = Date.now();
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ objs: data.rows || [], bldMap }));
+    localStorage.setItem(CACHE_TIME_KEY, String(now));
+    setObjects(data.rows || []);
     setBuildingNames2(bldMap);
+    setLastUpdated(new Date(now));
     setLoading(false);
+    setRefreshing(false);
   }
 
   async function saveBuilding(type, displayName) {
@@ -261,10 +288,18 @@ export default function Buildings({ onNavigate }) {
         params: [displayName, type]
       })
     });
-    setBuildingNames2(prev => ({
-      ...prev,
-      [type]: { ...prev[type], display_name: displayName }
-    }));
+    setBuildingNames2(prev => {
+      const updated = { ...prev, [type]: { ...prev[type], display_name: displayName } };
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const d = JSON.parse(cached);
+          d.bldMap = updated;
+          localStorage.setItem(CACHE_KEY, JSON.stringify(d));
+        }
+      } catch (e) {}
+      return updated;
+    });
     setEditingBuilding(null);
   }
 
@@ -338,23 +373,39 @@ export default function Buildings({ onNavigate }) {
     return acc;
   }, { всего: 0, сдано: 0, неСдано: 0, площадьВсего: 0, площадьСдано: 0, аренда: 0, коммуналка: 0 });
 
+  const filteredTotals = filteredBuildings.reduce((acc, name) => {
+    const s = getBuildingStats(buildings[name]);
+    acc.всего += s.всего;
+    acc.сдано += s.сдано;
+    acc.неСдано += s.неСдано;
+    acc.площадьВсего += s.площадьВсего;
+    acc.аренда += s.аренда;
+    acc.коммуналка += s.коммуналка;
+    return acc;
+  }, { всего: 0, сдано: 0, неСдано: 0, площадьВсего: 0, аренда: 0, коммуналка: 0 });
+
+  const tagStyle = (active) => ({
+    background: active ? '#534AB7' : '#e9ebf3',
+    color: active ? '#fff' : '#3f3f4a',
+    border: active ? '1px solid #534AB7' : '1px solid #c2c6d6',
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap'
+  });
+
   return (
     <div>
-      <div className="stats" style={{marginBottom:16}}>
-        <div className="stat"><div className="stat-label">Всего помещений</div><div className="stat-val purple">{allStats.всего}</div></div>
-        <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{allStats.сдано}</div></div>
-        <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{allStats.неСдано}</div></div>
-        <div className="stat"><div className="stat-label">Площадь сдано / всего</div><div className="stat-val" style={{fontSize:13}}>{Math.round(allStats.площадьСдано).toLocaleString('ru-RU')} / {Math.round(allStats.площадьВсего).toLocaleString('ru-RU')} м²</div></div>
-        <div className="stat"><div className="stat-label">Аренда / Коммуналка</div><div className="stat-val" style={{fontSize:12}}>{allStats.аренда.toLocaleString('ru-RU')} / {allStats.коммуналка.toLocaleString('ru-RU')} ₽</div></div>
+      <div className="stats" style={{marginBottom:12, display:'flex', flexWrap:'wrap', gap:8}}>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Всего помещений</div><div className="stat-val purple" style={{fontSize:18}}>{allStats.всего}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Сдано</div><div className="stat-val green" style={{fontSize:18}}>{allStats.сдано}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Свободно</div><div className="stat-val red" style={{fontSize:18}}>{allStats.неСдано}</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Площадь сдано / всего</div><div className="stat-val" style={{fontSize:13}}>{Math.round(allStats.площадьСдано).toLocaleString('ru-RU')} / {Math.round(allStats.площадьВсего).toLocaleString('ru-RU')} м²</div></div>
+        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Аренда / Коммуналка</div><div className="stat-val" style={{fontSize:12}}>{allStats.аренда.toLocaleString('ru-RU')} / {allStats.коммуналка.toLocaleString('ru-RU')} ₽</div></div>
       </div>
 
       <div style={{display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center'}}>
-        <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setSelectedBuilding(null); }}
-          style={{padding:'6px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
-          <option value="">Все статусы</option>
-          <option value="Сдано">Есть сданные</option>
-          <option value="Не сдано">Есть свободные</option>
-        </select>
+        <span style={{fontSize:12, color:'#888', marginRight:2}}>Статус:</span>
+        <button onClick={() => { setFilterStatus(''); setSelectedBuilding(null); }} style={tagStyle(filterStatus === '')}>Все статусы</button>
+        <button onClick={() => { setFilterStatus('Сдано'); setSelectedBuilding(null); }} style={tagStyle(filterStatus === 'Сдано')}>Есть сданные</button>
+        <button onClick={() => { setFilterStatus('Не сдано'); setSelectedBuilding(null); }} style={tagStyle(filterStatus === 'Не сдано')}>Есть свободные</button>
         <div style={{display:'flex', alignItems:'center', gap:4, fontSize:13}}>
           <span style={{color:'#888'}}>Площадь:</span>
           <input type="number" placeholder="от" value={filterAreaMin} onChange={e => setFilterAreaMin(e.target.value)}
@@ -379,7 +430,17 @@ export default function Buildings({ onNavigate }) {
             ✕ Сбросить
           </button>
         )}
+        <button onClick={() => fetchAll(true)} disabled={refreshing}
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+          {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
+        </button>
       </div>
+
+      {lastUpdated && (
+        <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>
+          Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
+        </div>
+      )}
 
       <div style={{display:'flex', gap:16, marginBottom:12}}>
         {Object.entries(STATUS_COLORS).filter(([k]) => k !== 'default').map(([status, style]) => (
@@ -461,6 +522,20 @@ export default function Buildings({ onNavigate }) {
                 );
               })}
             </tbody>
+            <tfoot>
+              <tr style={{fontWeight:600, background:'#f9f9fb', borderTop:'2px solid #e5e5ea'}}>
+                <td>Итого</td>
+                <td style={{textAlign:'center', color:'#aaa'}}>—</td>
+                <td style={{textAlign:'center'}}>{filteredTotals.всего}</td>
+                <td style={{textAlign:'center', color:'#3B6D11'}}>{filteredTotals.сдано}</td>
+                <td style={{textAlign:'center', color: filteredTotals.неСдано > 0 ? '#A32D2D' : '#888'}}>{filteredTotals.неСдано}</td>
+                <td style={{textAlign:'right', fontSize:12}}>{Math.round(filteredTotals.площадьВсего).toLocaleString('ru-RU')}</td>
+                <td style={{textAlign:'right', fontSize:12}}>{filteredTotals.аренда > 0 ? filteredTotals.аренда.toLocaleString('ru-RU') : '—'}</td>
+                <td style={{textAlign:'right', fontSize:12}}>{filteredTotals.коммуналка > 0 ? filteredTotals.коммуналка.toLocaleString('ru-RU') : '—'}</td>
+                <td style={{textAlign:'right', fontSize:12, color:'#534AB7'}}>{(filteredTotals.аренда + filteredTotals.коммуналка) > 0 ? (filteredTotals.аренда + filteredTotals.коммуналка).toLocaleString('ru-RU') : '—'}</td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
