@@ -384,25 +384,35 @@ export default function Buildings({ onNavigate }) {
     return acc;
   }, { всего: 0, сдано: 0, неСдано: 0, площадьВсего: 0, аренда: 0, коммуналка: 0 });
 
+  const PILL = {
+    purple: { bg:'#EDEAFB', border:'#C9BFF2', text:'#534AB7' },
+    green:  { bg:'#E1F3D8', border:'#B7DDA0', text:'#2F6B0C' },
+    red:    { bg:'#FBE1E1', border:'#EFB3B3', text:'#A32D2D' },
+    blue:   { bg:'#DCEBFA', border:'#A8CDEF', text:'#185FA5' },
+    gray:   { bg:'#EDEDF2', border:'#D2D2DC', text:'#4a4a55' },
+  };
+  const statPill = (tone = 'gray') => {
+    const c = PILL[tone] || PILL.gray;
+    return { background:c.bg, border:`1px solid ${c.border}`, borderRadius:8, padding:'6px 12px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
+  };
+  const pillValue = (tone = 'gray') => ({ fontWeight:700, color:(PILL[tone] || PILL.gray).text });
   const tagStyle = (active) => ({
-    background: active ? '#534AB7' : '#e9ebf3',
+    background: active ? '#534AB7' : PILL.gray.bg,
     color: active ? '#fff' : '#3f3f4a',
-    border: active ? '1px solid #534AB7' : '1px solid #c2c6d6',
-    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap'
+    border: active ? '1px solid #534AB7' : `1px solid ${PILL.gray.border}`,
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+    boxShadow: active ? '0 1px 3px rgba(83,74,183,0.35)' : 'none'
   });
 
   return (
     <div>
-      <div className="stats" style={{marginBottom:12, display:'flex', flexWrap:'wrap', gap:8}}>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Всего помещений</div><div className="stat-val purple" style={{fontSize:18}}>{allStats.всего}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Сдано</div><div className="stat-val green" style={{fontSize:18}}>{allStats.сдано}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Свободно</div><div className="stat-val red" style={{fontSize:18}}>{allStats.неСдано}</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Площадь сдано / всего</div><div className="stat-val" style={{fontSize:13}}>{Math.round(allStats.площадьСдано).toLocaleString('ru-RU')} / {Math.round(allStats.площадьВсего).toLocaleString('ru-RU')} м²</div></div>
-        <div className="stat" style={{padding:'8px 12px', minWidth:'auto'}}><div className="stat-label" style={{fontSize:11}}>Аренда / Коммуналка</div><div className="stat-val" style={{fontSize:12}}>{allStats.аренда.toLocaleString('ru-RU')} / {allStats.коммуналка.toLocaleString('ru-RU')} ₽</div></div>
-      </div>
-
-      <div style={{display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center'}}>
-        <span style={{fontSize:12, color:'#888', marginRight:2}}>Статус:</span>
+      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8, marginBottom:12}}>
+        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{allStats.всего}</span></div>
+        <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Сдано:</span><span style={pillValue('green')}>{allStats.сдано}</span></div>
+        <div style={statPill('red')}><span style={{color:'#6b6b75'}}>Свободно:</span><span style={pillValue('red')}>{allStats.неСдано}</span></div>
+        <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>Площадь:</span><span style={pillValue('gray')}>{Math.round(allStats.площадьСдано).toLocaleString('ru-RU')} / {Math.round(allStats.площадьВсего).toLocaleString('ru-RU')} м²</span></div>
+        <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>Аренда/Комм.:</span><span style={pillValue('gray')}>{allStats.аренда.toLocaleString('ru-RU')} / {allStats.коммуналка.toLocaleString('ru-RU')} ₽</span></div>
+        <span style={{fontSize:12, color:'#888', marginLeft:4}}>Статус:</span>
         <button onClick={() => { setFilterStatus(''); setSelectedBuilding(null); }} style={tagStyle(filterStatus === '')}>Все статусы</button>
         <button onClick={() => { setFilterStatus('Сдано'); setSelectedBuilding(null); }} style={tagStyle(filterStatus === 'Сдано')}>Есть сданные</button>
         <button onClick={() => { setFilterStatus('Не сдано'); setSelectedBuilding(null); }} style={tagStyle(filterStatus === 'Не сдано')}>Есть свободные</button>
