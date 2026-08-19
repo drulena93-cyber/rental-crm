@@ -17,6 +17,7 @@ export default function App() {
   const [highlightId, setHighlightId] = useState(null);
   const [contactTenantId, setContactTenantId] = useState(null);
   const [generationData, setGenerationData] = useState(null);
+  const [objectsFilterStatus, setObjectsFilterStatus] = useState(null);
   const [navStack, setNavStack] = useState([]);
   const [showPaymentsTab, setShowPaymentsTab] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
@@ -51,13 +52,14 @@ export default function App() {
   }
 
   function handleNavigate(section, id, data) {
-    setNavStack(prev => [...prev, { tab, highlightId, contactTenantId, generationData }]);
+    setNavStack(prev => [...prev, { tab, highlightId, contactTenantId, generationData, objectsFilterStatus }]);
     if (section === 'tenants') {
       changeTab('tenants');
       setHighlightId(id);
     } else if (section === 'objects') {
       changeTab('objects');
       setHighlightId(id);
+      setObjectsFilterStatus(data?.filterStatus || null);
     } else if (section === 'contacts') {
       changeTab('contacts');
       setContactTenantId(id);
@@ -77,6 +79,7 @@ export default function App() {
     setHighlightId(prev.highlightId);
     setContactTenantId(prev.contactTenantId);
     setGenerationData(prev.generationData);
+    setObjectsFilterStatus(prev.objectsFilterStatus || null);
     localStorage.setItem('active_tab', prev.tab);
   }
 
@@ -85,6 +88,7 @@ export default function App() {
     setHighlightId(null);
     setContactTenantId(null);
     setGenerationData(null);
+    setObjectsFilterStatus(null);
     changeTab(newTab);
   }
 
@@ -180,7 +184,7 @@ export default function App() {
       )}
       <div className="content">
         {tab === 'buildings' && <Buildings onNavigate={handleNavigate} />}
-        {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} />}
+        {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} initialFilterStatus={objectsFilterStatus} />}
         {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} showPayments={showPaymentsTab} />}
         {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
         {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
