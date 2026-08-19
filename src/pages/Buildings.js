@@ -207,27 +207,6 @@ function BuildingKeysSection({ buildingType }) {
   );
 }
 
-function InfoTip({ text }) {
-  const [show, setShow] = useState(false);
-  return (
-    <span
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-      style={{position:'relative', display:'inline-flex', marginLeft:3}}>
-      <span style={{cursor:'help', color:'#534AB7', fontWeight:700, fontSize:10, border:'1px solid #534AB7', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'#fff'}}>!</span>
-      {show && (
-        <span style={{
-          position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
-          background:'#333', color:'#fff', fontSize:11, fontWeight:400, padding:'6px 10px', borderRadius:6,
-          whiteSpace:'nowrap', zIndex:200, boxShadow:'0 2px 8px rgba(0,0,0,0.25)'
-        }}>
-          {text}
-        </span>
-      )}
-    </span>
-  );
-}
-
 export default function Buildings({ onNavigate }) {
   const CACHE_KEY = 'buildings_cache';
   const CACHE_TIME_KEY = 'buildings_cache_time';
@@ -332,6 +311,7 @@ export default function Buildings({ onNavigate }) {
 
   function getBuildingStats(objs) {
     const учитываемые = objs.filter(o => o.status !== 'Не учитывать');
+    const неУчитываемые = objs.filter(o => o.status === 'Не учитывать');
     const сдано = учитываемые.filter(o => o.status === 'Сдано');
     const неСдано = учитываемые.filter(o => o.status === 'Не сдано');
     const площадьВсего = учитываемые.reduce((s, o) => s + (parseFloat(o.area) || 0), 0);
@@ -340,9 +320,10 @@ export default function Buildings({ onNavigate }) {
     const коммуналка = сдано.reduce((s, o) => s + (parseFloat(o.utility_cost) || 0), 0);
     const этажи = [...new Set(учитываемые.map(o => o.floor).filter(Boolean))];
     return {
-      всего: учитываемые.length,
+      всего: objs.length,
       сдано: сдано.length,
       неСдано: неСдано.length,
+      неУчитывать: неУчитываемые.length,
       площадьВсего,
       площадьСдано,
       аренда,
@@ -382,28 +363,17 @@ export default function Buildings({ onNavigate }) {
     return true;
   });
 
-  const allStats = buildingNames.reduce((acc, name) => {
-    const s = getBuildingStats(buildings[name]);
-    acc.всего += s.всего;
-    acc.сдано += s.сдано;
-    acc.неСдано += s.неСдано;
-    acc.площадьВсего += s.площадьВсего;
-    acc.площадьСдано += s.площадьСдано;
-    acc.аренда += s.аренда;
-    acc.коммуналка += s.коммуналка;
-    return acc;
-  }, { всего: 0, сдано: 0, неСдано: 0, площадьВсего: 0, площадьСдано: 0, аренда: 0, коммуналка: 0 });
-
   const filteredTotals = filteredBuildings.reduce((acc, name) => {
     const s = getBuildingStats(buildings[name]);
     acc.всего += s.всего;
     acc.сдано += s.сдано;
     acc.неСдано += s.неСдано;
+    acc.неУчитывать += s.неУчитывать;
     acc.площадьВсего += s.площадьВсего;
     acc.аренда += s.аренда;
     acc.коммуналка += s.коммуналка;
     return acc;
-  }, { всего: 0, сдано: 0, неСдано: 0, площадьВсего: 0, аренда: 0, коммуналка: 0 });
+  }, { всего: 0, сдано: 0, неСдано: 0, неУчитывать: 0, площадьВсего: 0, аренда: 0, коммуналка: 0 });
 
   const PILL = {
     purple: { bg:'#EDEAFB', border:'#C9BFF2', text:'#534AB7' },
@@ -428,14 +398,6 @@ export default function Buildings({ onNavigate }) {
   return (
     <div>
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8, marginBottom:12}}>
-        <div style={statPill('purple')}>
-          <span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{allStats.всего}</span>
-          <InfoTip text="Всего помещений" />
-        </div>
-        <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Сдано:</span><span style={pillValue('green')}>{allStats.сдано}</span></div>
-        <div style={statPill('red')}><span style={{color:'#6b6b75'}}>Свободно:</span><span style={pillValue('red')}>{allStats.неСдано}</span></div>
-        <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>Площадь:</span><span style={pillValue('gray')}>{Math.round(allStats.площадьСдано).toLocaleString('ru-RU')} / {Math.round(allStats.площадьВсего).toLocaleString('ru-RU')} м²</span></div>
-        <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>Аренда/Комм.:</span><span style={pillValue('gray')}>{allStats.аренда.toLocaleString('ru-RU')} / {allStats.коммуналка.toLocaleString('ru-RU')} ₽</span></div>
         <span style={{fontSize:12, color:'#888', marginLeft:4}}>Статус:</span>
         <button onClick={() => { setFilterStatus(''); setSelectedBuilding(null); }} style={tagStyle(filterStatus === '')}>Все статусы</button>
         <button onClick={() => { setFilterStatus('Сдано'); setSelectedBuilding(null); }} style={tagStyle(filterStatus === 'Сдано')}>Есть сданные</button>
@@ -495,6 +457,7 @@ export default function Buildings({ onNavigate }) {
                 <th style={{textAlign:'center'}}>Всего</th>
                 <th style={{textAlign:'center'}}>Сдано</th>
                 <th style={{textAlign:'center'}}>Своб.</th>
+                <th style={{textAlign:'center', color:'#888'}}>Не учит.</th>
                 <th style={{textAlign:'right'}}>Площадь м²</th>
                 <th style={{textAlign:'right'}}>Аренда ₽</th>
                 <th style={{textAlign:'right'}}>Коммун. ₽</th>
@@ -505,7 +468,7 @@ export default function Buildings({ onNavigate }) {
             <tbody>
               {filteredBuildings.map(name => {
                 const s = getBuildingStats(buildings[name]);
-                const pct = s.всего > 0 ? Math.round((s.сдано / s.всего) * 100) : 0;
+                const pct = (s.сдано + s.неСдано) > 0 ? Math.round((s.сдано / (s.сдано + s.неСдано)) * 100) : 0;
                 const barColor = pct === 100 ? '#3B6D11' : pct > 50 ? '#534AB7' : '#f0a500';
                 const isSelected = selectedBuilding === name;
                 return (
@@ -540,6 +503,7 @@ export default function Buildings({ onNavigate }) {
                     <td style={{textAlign:'center'}}>{s.всего}</td>
                     <td style={{textAlign:'center', color:'#3B6D11', fontWeight:500}}>{s.сдано}</td>
                     <td style={{textAlign:'center', color: s.неСдано > 0 ? '#A32D2D' : '#888', fontWeight: s.неСдано > 0 ? 500 : 400}}>{s.неСдано}</td>
+                    <td style={{textAlign:'center', color:'#888', fontSize:12}}>{s.неУчитывать || '—'}</td>
                     <td style={{textAlign:'right', fontSize:12}}>{Math.round(s.площадьВсего).toLocaleString('ru-RU')}</td>
                     <td style={{textAlign:'right', fontSize:12}}>{s.аренда > 0 ? s.аренда.toLocaleString('ru-RU') : '—'}</td>
                     <td style={{textAlign:'right', fontSize:12}}>{s.коммуналка > 0 ? s.коммуналка.toLocaleString('ru-RU') : '—'}</td>
@@ -574,6 +538,11 @@ export default function Buildings({ onNavigate }) {
                   title="Перейти в Объекты со статусом «Не сдано»"
                   onClick={() => onNavigate('objects', null, { filterStatus: 'Не сдано' })}>
                   {filteredTotals.неСдано}
+                </td>
+                <td style={{textAlign:'center', color:'#888', fontSize:12, cursor:'pointer', textDecoration:'underline'}}
+                  title="Перейти в Объекты со статусом «Не учитывать»"
+                  onClick={() => onNavigate('objects', null, { filterStatus: 'Не учитывать' })}>
+                  {filteredTotals.неУчитывать || '—'}
                 </td>
                 <td style={{textAlign:'right', fontSize:12}}>{Math.round(filteredTotals.площадьВсего).toLocaleString('ru-RU')}</td>
                 <td style={{textAlign:'right', fontSize:12}}>{filteredTotals.аренда > 0 ? filteredTotals.аренда.toLocaleString('ru-RU') : '—'}</td>
