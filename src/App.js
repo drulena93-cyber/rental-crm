@@ -22,6 +22,23 @@ export default function App() {
   const [showPaymentsTab, setShowPaymentsTab] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [seenCount, setSeenCount] = useState(() => parseInt(localStorage.getItem('changelog_seen_count') || '0'));
+  const [globalStats, setGlobalStats] = useState({ сдано: null, свободно: null });
+
+  useEffect(() => {
+    fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT status, COUNT(*) as cnt FROM objects WHERE deleted_at IS NULL AND type IS NOT NULL AND status != 'Не учитывать' GROUP BY status`,
+        params: []
+      })
+    }).then(r => r.json()).then(d => {
+      const rows = d.rows || [];
+      const сдано = rows.find(r => r.status === 'Сдано')?.cnt || 0;
+      const свободно = rows.find(r => r.status === 'Не сдано')?.cnt || 0;
+      setGlobalStats({ сдано: parseInt(сдано), свободно: parseInt(свободно) });
+    }).catch(() => {});
+  }, []);
 
   const unreadCount = Math.max(0, CHANGELOG.length - seenCount);
 
@@ -103,6 +120,7 @@ export default function App() {
               ← Назад
             </button>
           )}
+          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
           <button className={tab === 'buildings' ? 'active' : ''} onClick={() => handleTabClick('buildings')}>🏢 Здания</button>
           <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
           <button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
@@ -112,7 +130,17 @@ export default function App() {
           {showPaymentsTab && <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>}
           <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
-          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
+          <div style={{flex:1}} />
+          {globalStats.сдано !== null && (
+            <div style={{display:'flex', gap:6, marginRight:6}}>
+              <span style={{background:'#E1F3D8', border:'1px solid #B7DDA0', color:'#2F6B0C', borderRadius:8, padding:'4px 9px', fontSize:11, fontWeight:600, whiteSpace:'nowrap'}}>
+                Сдано: {globalStats.сдано}
+              </span>
+              <span style={{background:'#FBE1E1', border:'1px solid #EFB3B3', color:'#A32D2D', borderRadius:8, padding:'4px 9px', fontSize:11, fontWeight:600, whiteSpace:'nowrap'}}>
+                Свободно: {globalStats.свободно}
+              </span>
+            </div>
+          )}
           <div style={{position:'relative', marginLeft:4}}>
             <button onClick={toggleChangelog}
               title="История изменений"
