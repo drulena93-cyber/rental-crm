@@ -6,7 +6,7 @@ const CACHE_KEY = 'documents_cache';
 const CACHE_TIME_KEY = 'documents_cache_time';
 const CACHE_TTL = 60 * 1000;
 
-export default function AllDocuments({ onNavigate }) {
+export default function AllDocuments({ onNavigate, refreshTrigger }) {
   const [documents, setDocuments] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [docTypes, setDocTypes] = useState([]);
@@ -24,6 +24,12 @@ export default function AllDocuments({ onNavigate }) {
   const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => { fetchAll(false); }, []);
+
+  const firstRefresh = React.useRef(true);
+  useEffect(() => {
+    if (firstRefresh.current) { firstRefresh.current = false; return; }
+    fetchAll(true);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     localStorage.setItem('documents_page', String(page));
