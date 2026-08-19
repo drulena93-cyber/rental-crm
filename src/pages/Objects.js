@@ -308,7 +308,7 @@ function HistorySection({ objectId, tenants, onNavigate }) {
   );
 }
 
-export default function Objects({ onNavigate, highlightId, initialFilterStatus }) {
+export default function Objects({ onNavigate, highlightId, initialFilterStatus, refreshTrigger }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [objectTenants, setObjectTenants] = useState([]);
@@ -346,6 +346,12 @@ export default function Objects({ onNavigate, highlightId, initialFilterStatus }
   const [objectKeys, setObjectKeys] = useState({});
 
   useEffect(() => { fetchAll(false); }, []);
+
+  const firstRefresh = useRef(true);
+  useEffect(() => {
+    if (firstRefresh.current) { firstRefresh.current = false; return; }
+    fetchAll(true);
+  }, [refreshTrigger]);
   useEffect(() => {
     if (highlightId && objects.length > 0) {
       const o = objects.find(o => o.id === highlightId);
