@@ -9,6 +9,8 @@ export default function Analytics({ onNavigate }) {
   const [tenants, setTenants] = useState([]);
   const [objectTenants, setObjectTenants] = useState([]);
   const [history, setHistory] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -26,11 +28,13 @@ export default function Analytics({ onNavigate }) {
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
         try {
-          const { objs, tens, ot, hist } = JSON.parse(cached);
+          const { objs, tens, ot, hist, cons, docs } = JSON.parse(cached);
           setObjects(objs || []);
           setTenants(tens || []);
           setObjectTenants(ot || []);
           setHistory(hist || []);
+          setContacts(cons || []);
+          setDocuments(docs || []);
           setLastUpdated(new Date(parseInt(cachedTime)));
           setLoading(false);
           return;
@@ -39,7 +43,7 @@ export default function Analytics({ onNavigate }) {
     }
     forceRefresh ? setRefreshing(true) : setLoading(true);
     try {
-      const [objRes, tenRes, otRes, histRes] = await Promise.all([
+      const [objRes, tenRes, otRes, histRes, conRes, docRes] = await Promise.all([
         fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ query: `SELECT * FROM objects WHERE deleted_at IS NULL`, params:[] }) }),
         fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
@@ -48,19 +52,26 @@ export default function Analytics({ onNavigate }) {
           body: JSON.stringify({ query: `SELECT ot.*, o.type as object_type FROM object_tenants ot JOIN objects o ON o.id = ot.object_id WHERE o.deleted_at IS NULL`, params:[] }) }),
         fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ query: `SELECT * FROM object_history ORDER BY date_to DESC`, params:[] }) }),
+        fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ query: `SELECT id, contact_type FROM contacts WHERE deleted_at IS NULL`, params:[] }) }),
+        fetch('/api/db', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ query: `SELECT id, type FROM documents`, params:[] }) }),
       ]);
-      const [objData, tenData, otData, histData] = await Promise.all([
-        objRes.json(), tenRes.json(), otRes.json(), histRes.json()
+      const [objData, tenData, otData, histData, conData, docData] = await Promise.all([
+        objRes.json(), tenRes.json(), otRes.json(), histRes.json(), conRes.json(), docRes.json()
       ]);
       const now = Date.now();
       localStorage.setItem(CACHE_KEY, JSON.stringify({
-        objs: objData.rows || [], tens: tenData.rows || [], ot: otData.rows || [], hist: histData.rows || []
+        objs: objData.rows || [], tens: tenData.rows || [], ot: otData.rows || [], hist: histData.rows || [],
+        cons: conData.rows || [], docs: docData.rows || []
       }));
       localStorage.setItem(CACHE_TIME_KEY, String(now));
       setObjects(objData.rows || []);
       setTenants(tenData.rows || []);
       setObjectTenants(otData.rows || []);
       setHistory(histData.rows || []);
+      setContacts(conData.rows || []);
+      setDocuments(docData.rows || []);
       setLastUpdated(new Date(now));
     } catch(e) { console.error(e); }
     setLoading(false);
@@ -74,6 +85,13 @@ export default function Analytics({ onNavigate }) {
   const свободно = учитываемые.filter(o => o.status === 'Не сдано');
   const заполненность = учитываемые.length ? Math.round(сдано.length / учитываемые.length * 100) : 0;
   const активные = tenants.filter(t => t.status === 'Активный');
+  const безОбъекта = tenants.filter(t => !objectTenants.some(ot => ot.tenant_id === t.id));
+  const isRenter = (c) => !c.contact_type || c.contact_type === 'Арендатор';
+  const контактыАрендаторы = contacts.filter(c => isRenter(c));
+  const контактыПодрядчики = contacts.filter(c => !isRenter(c));
+  const документыДоговоры = documents.filter(d => d.type === 'Договор');
+  const документыАкты = documents.filter(d => d.type === 'Акт');
+  const документыСчета = documents.filter(d => d.type === 'Счёт');
   const ип = активные.filter(t => t.type === 'ИП');
   const ооо = активные.filter(t => t.type === 'ЮРИД.ЛИЦО');
   const физ = активные.filter(t => t.type === 'ФИЗ.ЛИЦО');
@@ -161,14 +179,7 @@ export default function Analytics({ onNavigate }) {
   return (
     <div>
       {/* ── Сводка ── */}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, marginBottom:8}}>
-        <div className="stats" style={{margin:0, flex:1, gridTemplateColumns:'repeat(5, 1fr)'}}>
-          <div className="stat"><div className="stat-label">Всего объектов</div><div className="stat-val purple">{учитываемые.length}</div></div>
-          <div className="stat"><div className="stat-label">Сдано</div><div className="stat-val green">{сдано.length}</div></div>
-          <div className="stat"><div className="stat-label">Свободно</div><div className="stat-val red">{свободно.length}</div></div>
-          <div className="stat"><div className="stat-label">Заполненность</div><div className="stat-val blue">{заполненность}%</div></div>
-          <div className="stat"><div className="stat-label">Активных арендаторов</div><div className="stat-val">{активные.length}</div></div>
-        </div>
+      <div style={{display:'flex', justifyContent:'flex-end', marginBottom:4}}>
         <button onClick={() => fetchAll(true)} disabled={refreshing}
           style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
@@ -179,6 +190,51 @@ export default function Analytics({ onNavigate }) {
           Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
         </div>
       )}
+
+      <table style={{width:'100%', marginBottom:8}}>
+        <thead>
+          <tr>
+            <th style={{width:160}}>Раздел</th>
+            <th>Показатели</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{color:'#888'}}>Здания и объекты</td>
+            <td>
+              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{учитываемые.length}</b></span>
+              <span style={{marginRight:20}}>Сдано <b style={{color:'#3B6D11'}}>{сдано.length}</b></span>
+              <span style={{marginRight:20}}>Свободно <b style={{color:'#A32D2D'}}>{свободно.length}</b></span>
+              <span>Заполненность <b>{заполненность}%</b></span>
+            </td>
+          </tr>
+          <tr>
+            <td style={{color:'#888'}}>Арендаторы</td>
+            <td>
+              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{tenants.length}</b></span>
+              <span style={{marginRight:20}}>Активных <b style={{color:'#3B6D11'}}>{активные.length}</b></span>
+              <span>Без объекта <b style={{color:'#A32D2D'}}>{безОбъекта.length}</b></span>
+            </td>
+          </tr>
+          <tr>
+            <td style={{color:'#888'}}>Контакты</td>
+            <td>
+              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{contacts.length}</b></span>
+              <span style={{marginRight:20}}>Арендаторов <b style={{color:'#3B6D11'}}>{контактыАрендаторы.length}</b></span>
+              <span>Подрядчиков <b style={{color:'#8A5A0B'}}>{контактыПодрядчики.length}</b></span>
+            </td>
+          </tr>
+          <tr>
+            <td style={{color:'#888'}}>Документы</td>
+            <td>
+              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{documents.length}</b></span>
+              <span style={{marginRight:20}}>Договоров <b style={{color:'#185FA5'}}>{документыДоговоры.length}</b></span>
+              <span style={{marginRight:20}}>Актов <b style={{color:'#3B6D11'}}>{документыАкты.length}</b></span>
+              <span>Счетов <b style={{color:'#8A5A0B'}}>{документыСчета.length}</b></span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       {/* ── Типы арендаторов ── */}
       {sectionTitle('Типы арендаторов')}
