@@ -308,6 +308,27 @@ function HistorySection({ objectId, tenants, onNavigate }) {
   );
 }
 
+function InfoTip({ text }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      style={{position:'relative', display:'inline-flex', marginLeft:3}}>
+      <span style={{cursor:'help', color:'#534AB7', fontWeight:700, fontSize:10, border:'1px solid #534AB7', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'#fff'}}>!</span>
+      {show && (
+        <span style={{
+          position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
+          background:'#333', color:'#fff', fontSize:11, fontWeight:400, padding:'6px 10px', borderRadius:6,
+          whiteSpace:'nowrap', zIndex:200, boxShadow:'0 2px 8px rgba(0,0,0,0.25)'
+        }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function Objects({ onNavigate, highlightId, initialFilterStatus }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
@@ -633,7 +654,7 @@ for (const r of rows) {
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
         <div style={statPill('purple')}>
           <span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{objects.length}</span>
-          <span title="Всего объектов" style={{cursor:'help', marginLeft:2, color:'#534AB7', fontWeight:700, fontSize:10, border:'1px solid #534AB7', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>!</span>
+          <InfoTip text="Всего объектов" />
         </div>
         <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Сдано:</span><span style={pillValue('green')}>{rented.length}</span></div>
         <div style={statPill('red')}><span style={{color:'#6b6b75'}}>Своб.:</span><span style={pillValue('red')}>{free.length}</span></div>
