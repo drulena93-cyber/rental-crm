@@ -308,12 +308,16 @@ function HistorySection({ objectId, tenants, onNavigate }) {
   );
 }
 
-export default function Objects({ onNavigate, highlightId }) {
+export default function Objects({ onNavigate, highlightId, initialFilterStatus }) {
   const [objects, setObjects] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [objectTenants, setObjectTenants] = useState([]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('objects_filterStatus') || '');
+
+  useEffect(() => {
+    if (initialFilterStatus) setFilterStatus(initialFilterStatus);
+  }, [initialFilterStatus]);
   const [filterFloor, setFilterFloor] = useState(() => localStorage.getItem('objects_filterFloor') || '');
   const [filterType, setFilterType] = useState(() => localStorage.getItem('objects_filterType') || '');
   const [filterShared, setFilterShared] = useState(() => localStorage.getItem('objects_filterShared') || '');
@@ -484,7 +488,9 @@ for (const r of rows) {
     if (search && !o.name?.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterStatus && o.status !== filterStatus) return false;
     if (filterFloor && o.floor !== parseInt(filterFloor)) return false;
-    if (filterType && o.type !== filterType) return false;
+    if (filterType === '__NONE__') {
+      if (o.type) return false;
+    } else if (filterType && o.type !== filterType) return false;
     if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
     if (filterTenant && !getObjectTenants(o.id).find(ot => ot.tenant_id === filterTenant)) return false;
     if (filterKeys) {
@@ -625,7 +631,10 @@ for (const r of rows) {
   return (
     <div>
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
-        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{objects.length}</span></div>
+        <div style={statPill('purple')}>
+          <span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{objects.length}</span>
+          <span title="Всего объектов" style={{cursor:'help', marginLeft:2, color:'#534AB7', fontWeight:700, fontSize:10, border:'1px solid #534AB7', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>!</span>
+        </div>
         <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Сдано:</span><span style={pillValue('green')}>{rented.length}</span></div>
         <div style={statPill('red')}><span style={{color:'#6b6b75'}}>Своб.:</span><span style={pillValue('red')}>{free.length}</span></div>
         <div style={statPill('blue')}><span style={{color:'#6b6b75'}}>Показано:</span><span style={pillValue('blue')}>{filtered.length}</span></div>
@@ -670,6 +679,7 @@ for (const r of rows) {
       <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
         <span style={{fontSize:12, color:'#888', marginRight:2}}>Тип:</span>
         <button onClick={() => setFilterType('')} style={tagStyle(filterType === '')}>Все типы</button>
+        <button onClick={() => setFilterType('__NONE__')} style={tagStyle(filterType === '__NONE__')}>Тип не указан</button>
         {types.map(t => (
           <button key={t} onClick={() => setFilterType(t)} style={tagStyle(filterType === t)}>{t}</button>
         ))}
