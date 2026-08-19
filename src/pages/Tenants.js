@@ -63,27 +63,6 @@ function TenantPayments({ tenantId }) {
     </table>
   );
 }
-function InfoTip({ text }) {
-  const [show, setShow] = useState(false);
-  return (
-    <span
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-      style={{position:'relative', display:'inline-flex', marginLeft:3}}>
-      <span style={{cursor:'help', color:'#534AB7', fontWeight:700, fontSize:10, border:'1px solid #534AB7', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'#fff'}}>!</span>
-      {show && (
-        <span style={{
-          position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
-          background:'#333', color:'#fff', fontSize:11, fontWeight:400, padding:'6px 10px', borderRadius:6,
-          whiteSpace:'nowrap', zIndex:200, boxShadow:'0 2px 8px rgba(0,0,0,0.25)'
-        }}>
-          {text}
-        </span>
-      )}
-    </span>
-  );
-}
-
 export default function Tenants({ onNavigate, highlightId, showPayments }) {
   const [tenants, setTenants] = useState([]);
   const [objects, setObjects] = useState([]);
@@ -283,7 +262,6 @@ setObjectTenants(otData.rows || []);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const active = tenants.filter(t => t.status === 'Активный');
-  const withoutObj = tenants.filter(t => !objectTenants.some(ot => ot.tenant_id === t.id));
   const floors = [...new Set(objects.map(o => o.floor).filter(f => f !== null && f !== undefined && f !== ''))].sort((a,b)=>a-b);
   const today = new Date();
 
@@ -438,30 +416,10 @@ const getTenantObjects = (tenantId) => {
     blue:   { bg:'#DCEBFA', border:'#A8CDEF', text:'#185FA5' },
     gray:   { bg:'#EDEDF2', border:'#D2D2DC', text:'#4a4a55' },
   };
-  const statPill = (tone = 'gray') => {
-    const c = PILL[tone] || PILL.gray;
-    return { background:c.bg, border:`1px solid ${c.border}`, borderRadius:8, padding:'6px 12px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
-  };
-  const pillValue = (tone = 'gray') => ({ fontWeight:700, color:(PILL[tone] || PILL.gray).text });
 
   return (
     <div>
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
-        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{tenants.length}</span></div>
-        <div
-          onClick={() => setFilterStatus(s => s === 'Активный' ? '' : 'Активный')}
-          style={{...statPill('green'), cursor:'pointer', outline: filterStatus === 'Активный' ? '2px solid #2F6B0C' : 'none'}}>
-          <span style={{color:'#6b6b75'}}>Активных:</span><span style={pillValue('green')}>{active.length}</span>
-        </div>
-        <div
-          onClick={() => setFilterObject(o => o === '__NONE__' ? '' : '__NONE__')}
-          style={{...statPill('red'), cursor:'pointer', outline: filterObject === '__NONE__' ? '2px solid #A32D2D' : 'none'}}>
-          <span style={{color:'#6b6b75'}}>Без объекта:</span><span style={pillValue('red')}>{withoutObj.length}</span>
-        </div>
-        <div style={statPill('blue')}>
-          <span style={{color:'#6b6b75'}}>Показанное:</span><span style={pillValue('blue')}>{filtered.length}</span>
-          <InfoTip text="Количество арендаторов, которые видны сейчас с учётом применённых фильтров" />
-        </div>
         <input placeholder="Поиск по имени..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">Все типы</option>
