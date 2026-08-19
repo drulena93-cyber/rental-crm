@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function Analytics({ onNavigate }) {
+export default function Analytics({ onNavigate, refreshTrigger }) {
   const CACHE_KEY = 'analytics_cache';
   const CACHE_TIME_KEY = 'analytics_cache_time';
   const CACHE_TTL = 60 * 1000;
@@ -21,6 +21,12 @@ export default function Analytics({ onNavigate }) {
   const [monthSortDir, setMonthSortDir] = useState({});
 
   useEffect(() => { fetchAll(false); }, []);
+
+  const firstRefresh = React.useRef(true);
+  useEffect(() => {
+    if (firstRefresh.current) { firstRefresh.current = false; return; }
+    fetchAll(true);
+  }, [refreshTrigger]);
 
   async function fetchAll(forceRefresh = false) {
     if (!forceRefresh) {
@@ -81,11 +87,12 @@ export default function Analytics({ onNavigate }) {
   if (loading) return <p>Загрузка...</p>;
 
   const учитываемые = objects.filter(o => o.status !== 'Не учитывать');
+  const неУчитывать = objects.filter(o => o.status === 'Не учитывать');
   const сдано = учитываемые.filter(o => o.status === 'Сдано');
   const свободно = учитываемые.filter(o => o.status === 'Не сдано');
   const заполненность = учитываемые.length ? Math.round(сдано.length / учитываемые.length * 100) : 0;
   const активные = tenants.filter(t => t.status === 'Активный');
-  const безОбъекта = tenants.filter(t => !objectTenants.some(ot => ot.tenant_id === t.id));
+  const активныеБезОбъекта = tenants.filter(t => t.status === 'Активный' && !objectTenants.some(ot => ot.tenant_id === t.id));
   const isRenter = (c) => !c.contact_type || c.contact_type === 'Арендатор';
   const контактыАрендаторы = contacts.filter(c => isRenter(c));
   const контактыПодрядчики = contacts.filter(c => !isRenter(c));
@@ -179,12 +186,6 @@ export default function Analytics({ onNavigate }) {
   return (
     <div>
       {/* ── Сводка ── */}
-      <div style={{display:'flex', justifyContent:'flex-end', marginBottom:4}}>
-        <button onClick={() => fetchAll(true)} disabled={refreshing}
-          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
-          {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
-        </button>
-      </div>
       {lastUpdated && (
         <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>
           Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
@@ -202,18 +203,17 @@ export default function Analytics({ onNavigate }) {
           <tr>
             <td style={{color:'#888'}}>Здания и объекты</td>
             <td>
-              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{учитываемые.length}</b></span>
+              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{objects.length}</b></span>
               <span style={{marginRight:20}}>Сдано <b style={{color:'#3B6D11'}}>{сдано.length}</b></span>
               <span style={{marginRight:20}}>Свободно <b style={{color:'#A32D2D'}}>{свободно.length}</b></span>
+              <span style={{marginRight:20}}>Не учитывать <b style={{color:'#888'}}>{неУчитывать.length}</b></span>
               <span>Заполненность <b>{заполненность}%</b></span>
             </td>
           </tr>
           <tr>
             <td style={{color:'#888'}}>Арендаторы</td>
             <td>
-              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{tenants.length}</b></span>
-              <span style={{marginRight:20}}>Активных <b style={{color:'#3B6D11'}}>{активные.length}</b></span>
-              <span>Без объекта <b style={{color:'#A32D2D'}}>{безОбъекта.length}</b></span>
+              <span>Активных без объекта <b style={{color:'#A32D2D'}}>{активныеБезОбъекта.length}</b></span>
             </td>
           </tr>
           <tr>
