@@ -6,7 +6,7 @@ const CACHE_KEY = 'contacts_cache';
 const CACHE_TIME_KEY = 'contacts_cache_time';
 const CACHE_TTL = 60 * 1000;
 
-export default function Contacts({ tenantId, onNavigate }) {
+export default function Contacts({ tenantId, onNavigate, refreshTrigger }) {
   const [contacts, setContacts] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [contactTypes, setContactTypes] = useState([]);
@@ -26,6 +26,12 @@ export default function Contacts({ tenantId, onNavigate }) {
 const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => { fetchAll(false); }, []);
+
+  const firstRefresh = React.useRef(true);
+  useEffect(() => {
+    if (firstRefresh.current) { firstRefresh.current = false; return; }
+    fetchAll(true);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     if (tenantId) setSelectedTenant(tenantId);
