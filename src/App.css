@@ -1,57 +1,241 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; background: #f5f5f5; color: #1a1a1a; }
-.app { min-height: 100vh; display: flex; flex-direction: column; }
-.topbar { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 0 24px; display: flex; align-items: center; gap: 32px; height: 52px; position: sticky; top: 0; z-index: 100; }
-.logo { font-size: 15px; font-weight: 500; color: #1a1a1a; }
-.tabs { display: flex; gap: 4px; }
-.tabs button { background: none; border: none; padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; color: #666; }
-.tabs button:hover { background: #f0f0f0; color: #1a1a1a; }
-.tabs button.active { background: #534AB7; color: #fff; }
-.content { padding: 20px 24px; flex: 1; }
-.toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
-.toolbar input, .toolbar select { font-size: 13px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; outline: none; }
-.btn-add { background: #534AB7; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; margin-left: auto; }
-.btn-add:hover { background: #3C3489; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-.stat { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px 16px; }
-.stat-label { font-size: 11px; color: #888; margin-bottom: 4px; }
-.stat-val { font-size: 22px; font-weight: 500; }
-.purple { color: #534AB7; }
-.green { color: #3B6D11; }
-.red { color: #A32D2D; }
-.amber { color: #854F0B; }
-.btn-save { background: #534AB7; color: #fff; border: none; }
-.btn-save { border-radius: 6px; padding: 8px 20px; }
-.btn-save { font-size: 13px; cursor: pointer; }
-.btn-cancel { background: none; border: 1px solid #ddd; border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; color: #666; }
-.form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
-.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; outline: none; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0f0f0; }
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; }
-.modal { background: #fff; border-radius: 12px; padding: 24px; width: 560px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
-.modal-title { font-size: 16px; font-weight: 500; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
-.modal-close { background: none; border: 1px solid #ddd; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; color: #666; }
-.detail-row { display: flex; padding: 8px 0; border-bottom: 1px solid #f5f5f5; }
-.detail-key { font-size: 12px; color: #888; min-width: 160px; }
-.detail-val { font-size: 13px; flex: 1; }
-.linked-section { margin-top: 16px; }
-.linked-title { font-size: 11px; font-weight: 500; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-.linked-item { background: #f8f8f8; border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-bottom: 6px; }
-.page-info { font-size: 12px; color: #888; margin-top: 10px; text-align: right; }
-.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-.chart-card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; }
-.chart-title { font-size: 12px; font-weight: 500; color: #888; margin-bottom: 12px; }
-.alert { background: #FAEEDA; border: 1px solid #FAC775; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; font-size: 13px; color: #854F0B; }
-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #e5e5e5; font-size: 13px; }
-th { background: #f8f8f8; padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 500; color: #888; border-bottom: 1px solid #e5e5e5; }
-td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
-tr:last-child td { border-bottom: none; }
-tr:hover td { background: #fafafa; cursor: pointer; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
-.badge-green { background: #EAF3DE; color: #3B6D11; }
-.badge-red { background: #FCEBEB; color: #A32D2D; }
-.badge-gray { background: #f0f0f0; color: #666; }
-.badge-blue { background: #E6F1FB; color: #185FA5; }
-.badge-amber { background: #FAEEDA; color: #854F0B; }
+import React, { useState, useEffect } from 'react';
+import Objects from './pages/Objects';
+import Tenants from './pages/Tenants';
+import Analytics from './pages/Analytics';
+import Contacts from './pages/Contacts';
+import Trash from './pages/Trash';
+import Settings from './pages/Settings';
+import AllDocuments from './pages/AllDocuments';
+import InvoiceGeneration from './pages/InvoiceGeneration';
+import Payments from './pages/Payments';
+import Buildings from './pages/Buildings';
+import CHANGELOG from './changelogData';
+import './App.css';
+
+export default function App() {
+  const [tab, setTab] = useState(() => localStorage.getItem('active_tab') || 'objects');
+  const [highlightId, setHighlightId] = useState(null);
+  const [contactTenantId, setContactTenantId] = useState(null);
+  const [generationData, setGenerationData] = useState(null);
+  const [objectsFilterStatus, setObjectsFilterStatus] = useState(null);
+  const [navStack, setNavStack] = useState([]);
+  const [showPaymentsTab, setShowPaymentsTab] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [seenCount, setSeenCount] = useState(() => parseInt(localStorage.getItem('changelog_seen_count') || '0'));
+  const [globalStats, setGlobalStats] = useState({ сдано: null, свободно: null });
+  const [globalRefreshing, setGlobalRefreshing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  function fetchGlobalStats() {
+    return fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT status, COUNT(*) as cnt FROM objects WHERE deleted_at IS NULL AND type IS NOT NULL AND status != 'Не учитывать' GROUP BY status`,
+        params: []
+      })
+    }).then(r => r.json()).then(d => {
+      const rows = d.rows || [];
+      const сдано = rows.find(r => r.status === 'Сдано')?.cnt || 0;
+      const свободно = rows.find(r => r.status === 'Не сдано')?.cnt || 0;
+      setGlobalStats({ сдано: parseInt(сдано), свободно: parseInt(свободно) });
+    }).catch(() => {});
+  }
+
+  useEffect(() => { fetchGlobalStats(); }, []);
+
+  function handleGlobalRefresh() {
+    setGlobalRefreshing(true);
+    fetchGlobalStats().finally(() => setGlobalRefreshing(false));
+    setRefreshTrigger(t => t + 1);
+  }
+
+  const unreadCount = Math.max(0, CHANGELOG.length - seenCount);
+
+  function toggleChangelog() {
+    setShowChangelog(v => {
+      const next = !v;
+      if (next) {
+        localStorage.setItem('changelog_seen_count', String(CHANGELOG.length));
+        setSeenCount(CHANGELOG.length);
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `SELECT value FROM settings WHERE id = 'show_payments_tab'`, params: [] })
+    }).then(r => r.json()).then(d => {
+      setShowPaymentsTab(d.rows?.[0]?.value === 'true');
+    }).catch(() => {});
+  }, []);
+
+  function changeTab(newTab) {
+    setTab(newTab);
+    localStorage.setItem('active_tab', newTab);
+  }
+
+  function handleNavigate(section, id, data) {
+    setNavStack(prev => [...prev, { tab, highlightId, contactTenantId, generationData, objectsFilterStatus }]);
+    if (section === 'tenants') {
+      changeTab('tenants');
+      setHighlightId(id);
+    } else if (section === 'objects') {
+      changeTab('objects');
+      setHighlightId(id);
+      setObjectsFilterStatus(data?.filterStatus || null);
+    } else if (section === 'contacts') {
+      changeTab('contacts');
+      setContactTenantId(id);
+    } else if (section === 'analytics') {
+      changeTab('analytics');
+    } else if (section === 'generation') {
+      setGenerationData(data || null);
+      changeTab('generation');
+    }
+  }
+
+  function handleBack() {
+    if (navStack.length === 0) return;
+    const prev = navStack[navStack.length - 1];
+    setNavStack(s => s.slice(0, -1));
+    setTab(prev.tab);
+    setHighlightId(prev.highlightId);
+    setContactTenantId(prev.contactTenantId);
+    setGenerationData(prev.generationData);
+    setObjectsFilterStatus(prev.objectsFilterStatus || null);
+    localStorage.setItem('active_tab', prev.tab);
+  }
+
+  function handleTabClick(newTab) {
+    setNavStack([]);
+    setHighlightId(null);
+    setContactTenantId(null);
+    setGenerationData(null);
+    setObjectsFilterStatus(null);
+    changeTab(newTab);
+  }
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <div className="logo">🏢 CRM Аренда</div>
+        <nav className="tabs" style={{display:'flex', alignItems:'center'}}>
+          {navStack.length > 0 && (
+            <button onClick={handleBack}
+              style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer', marginRight:8, whiteSpace:'nowrap'}}>
+              ← Назад
+            </button>
+          )}
+          <button className={tab === 'analytics' ? 'active' : ''} onClick={() => handleTabClick('analytics')}>📊 Аналитика</button>
+          <button className={tab === 'buildings' ? 'active' : ''} onClick={() => handleTabClick('buildings')}>🏢 Здания</button>
+          <button className={tab === 'objects' ? 'active' : ''} onClick={() => handleTabClick('objects')}>Объекты</button>
+          <button className={tab === 'tenants' ? 'active' : ''} onClick={() => handleTabClick('tenants')}>Арендаторы</button>
+          <button className={tab === 'contacts' ? 'active' : ''} onClick={() => handleTabClick('contacts')}>Контакты</button>
+          <button className={tab === 'documents' ? 'active' : ''} onClick={() => handleTabClick('documents')}>📄 Документы</button>
+          <button className={tab === 'generation' ? 'active' : ''} onClick={() => handleTabClick('generation')}>✨ Генерация</button>
+          {showPaymentsTab && <button className={tab === 'payments' ? 'active' : ''} onClick={() => handleTabClick('payments')}>💳 Оплаты</button>}
+          <button className={tab === 'trash' ? 'active' : ''} onClick={() => handleTabClick('trash')} style={{color: tab === 'trash' ? '#fff' : '#A32D2D'}}>🗑 Корзина</button>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
+          <div style={{flex:1}} />
+          {globalStats.сдано !== null && (
+            <div style={{display:'flex', alignItems:'center', gap:6, marginRight:6}}>
+              <span style={{background:'#E1F3D8', border:'1px solid #B7DDA0', color:'#2F6B0C', borderRadius:6, padding:'6px 12px', fontSize:13, fontWeight:600, whiteSpace:'nowrap', display:'inline-flex', alignItems:'center'}}>
+                Сдано: {globalStats.сдано}
+              </span>
+              <span style={{background:'#FBE1E1', border:'1px solid #EFB3B3', color:'#A32D2D', borderRadius:6, padding:'6px 12px', fontSize:13, fontWeight:600, whiteSpace:'nowrap', display:'inline-flex', alignItems:'center'}}>
+                Свободно: {globalStats.свободно}
+              </span>
+            </div>
+          )}
+          <button onClick={handleGlobalRefresh} disabled={globalRefreshing}
+            style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap', marginRight:6}}>
+            {globalRefreshing ? '⏳ Обновление...' : '🔄 Обновить'}
+          </button>
+          <div style={{position:'relative', marginLeft:4}}>
+            <button onClick={toggleChangelog}
+              title="История изменений"
+              style={{
+                position:'relative', background: showChangelog ? '#EDEAFB' : 'transparent',
+                border:'1px solid #ddd', borderRadius:6, padding:'6px 10px', fontSize:15, cursor:'pointer', lineHeight:1
+              }}>
+              🔔
+              {unreadCount > 0 && (
+                <span style={{
+                  position:'absolute', top:-5, right:-5, background:'#A32D2D', color:'#fff',
+                  borderRadius:10, fontSize:10, fontWeight:700, minWidth:16, height:16,
+                  display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px', lineHeight:1
+                }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </nav>
+      </div>
+
+      {showChangelog && (
+        <div className="modal-overlay" onClick={() => setShowChangelog(false)}>
+          <div className="modal" style={{width:640, maxHeight:'82vh', display:'flex', flexDirection:'column', padding:0}} onClick={e => e.stopPropagation()}>
+            <div className="modal-title" style={{padding:'18px 24px', margin:0, borderBottom:'1px solid #eee'}}>
+              🔔 История изменений
+              <button className="modal-close" onClick={() => setShowChangelog(false)}>✕ Закрыть</button>
+            </div>
+            <div style={{overflowY:'auto', padding:'8px 24px 20px'}}>
+              {Array.isArray(CHANGELOG) && CHANGELOG.length > 0 ? (
+                Object.entries(
+                  [...CHANGELOG].reverse().reduce((groups, entry) => {
+                    if (!groups[entry.date]) groups[entry.date] = [];
+                    groups[entry.date].push(entry);
+                    return groups;
+                  }, {})
+                ).map(([date, entries]) => (
+                  <div key={date} style={{marginTop:18}}>
+                    <div style={{
+                      fontSize:12, fontWeight:700, color:'#534AB7', textTransform:'uppercase',
+                      letterSpacing:'0.04em', marginBottom:10, paddingBottom:6, borderBottom:'2px solid #EDEAFB'
+                    }}>
+                      {date}
+                    </div>
+                    {entries.map(entry => {
+                      const colonIdx = entry.text.indexOf(':');
+                      const hasPrefix = colonIdx > 0 && colonIdx < 30;
+                      const prefix = hasPrefix ? entry.text.slice(0, colonIdx) : null;
+                      const rest = hasPrefix ? entry.text.slice(colonIdx + 1).trim() : entry.text;
+                      return (
+                        <div key={entry.id} style={{display:'flex', gap:10, padding:'8px 0', alignItems:'flex-start'}}>
+                          <div style={{width:6, height:6, borderRadius:'50%', background:'#534AB7', marginTop:7, flexShrink:0}} />
+                          <div style={{fontSize:14, color:'#333', lineHeight:1.5}}>
+                            {prefix && <span style={{fontWeight:600, color:'#534AB7'}}>{prefix}: </span>}
+                            {rest}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              ) : (
+                <div style={{padding:'30px 0', textAlign:'center', color:'#aaa', fontSize:13}}>Пока нет записей</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="content">
+        {tab === 'buildings' && <Buildings onNavigate={handleNavigate} refreshTrigger={refreshTrigger} />}
+        {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} initialFilterStatus={objectsFilterStatus} refreshTrigger={refreshTrigger} />}
+        {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} showPayments={showPaymentsTab} refreshTrigger={refreshTrigger} />}
+        {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} refreshTrigger={refreshTrigger} />}
+        {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} refreshTrigger={refreshTrigger} />}
+        {tab === 'generation' && <InvoiceGeneration onNavigate={handleNavigate} initialData={generationData} />}
+        {tab === 'payments' && <Payments onNavigate={handleNavigate} />}
+        {tab === 'analytics' && <Analytics onNavigate={handleNavigate} refreshTrigger={refreshTrigger} />}
+        {tab === 'trash' && <Trash />}
+        {tab === 'settings' && <Settings />}
+      </div>
+    </div>
+  );
+}
