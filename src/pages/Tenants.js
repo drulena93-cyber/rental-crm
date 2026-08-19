@@ -237,7 +237,9 @@ setObjectTenants(otData.rows || []);
     if (filterType && t.type !== filterType) return false;
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterShared && (filterShared === 'да' ? !t.shared : t.shared)) return false;
-    if (filterObject) {
+    if (filterObject === '__NONE__') {
+      if (t.object_id) return false;
+    } else if (filterObject) {
       const tenantObj = objects.find(o => o.id === t.object_id);
       if (!tenantObj || tenantObj.type !== filterObject) return false;
     }
@@ -259,7 +261,7 @@ setObjectTenants(otData.rows || []);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const active = tenants.filter(t => t.status === 'Активный');
-  const withObj = tenants.filter(t => t.object_id);
+  const withoutObj = tenants.filter(t => !t.object_id);
   const floors = [...new Set(objects.map(o => o.floor).filter(f => f !== null && f !== undefined && f !== ''))].sort((a,b)=>a-b);
   const today = new Date();
 
@@ -424,9 +426,20 @@ const getTenantObjects = (tenantId) => {
     <div>
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
         <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{tenants.length}</span></div>
-        <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Активных:</span><span style={pillValue('green')}>{active.length}</span></div>
-        <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>С объектом:</span><span style={pillValue('gray')}>{withObj.length}</span></div>
-        <div style={statPill('blue')}><span style={{color:'#6b6b75'}}>Показано:</span><span style={pillValue('blue')}>{filtered.length}</span></div>
+        <div
+          onClick={() => setFilterStatus(s => s === 'Активный' ? '' : 'Активный')}
+          style={{...statPill('green'), cursor:'pointer', outline: filterStatus === 'Активный' ? '2px solid #2F6B0C' : 'none'}}>
+          <span style={{color:'#6b6b75'}}>Активных:</span><span style={pillValue('green')}>{active.length}</span>
+        </div>
+        <div
+          onClick={() => setFilterObject(o => o === '__NONE__' ? '' : '__NONE__')}
+          style={{...statPill('red'), cursor:'pointer', outline: filterObject === '__NONE__' ? '2px solid #A32D2D' : 'none'}}>
+          <span style={{color:'#6b6b75'}}>Без объекта:</span><span style={pillValue('red')}>{withoutObj.length}</span>
+        </div>
+        <div style={statPill('blue')}>
+          <span style={{color:'#6b6b75'}}>Показанное:</span><span style={pillValue('blue')}>{filtered.length}</span>
+          <span title="Количество арендаторов, которые видны сейчас с учётом применённых фильтров" style={{cursor:'help', marginLeft:2, color:'#185FA5', fontWeight:700, fontSize:10, border:'1px solid #185FA5', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>!</span>
+        </div>
         <input placeholder="Поиск по имени..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">Все типы</option>
@@ -460,6 +473,7 @@ const getTenantObjects = (tenantId) => {
       <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
         <span style={{fontSize:12, color:'#888', marginRight:2}}>Объект:</span>
         <button onClick={() => setFilterObject('')} style={tagStyle(filterObject === '')}>Все объекты</button>
+        <button onClick={() => setFilterObject('__NONE__')} style={tagStyle(filterObject === '__NONE__')}>Без объекта</button>
         {[...new Set(objects.map(o => o.type).filter(Boolean))].map(type => (
           <button key={type} onClick={() => setFilterObject(type)} style={tagStyle(filterObject === type)}>{type}</button>
         ))}
