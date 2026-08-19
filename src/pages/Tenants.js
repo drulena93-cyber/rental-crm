@@ -63,7 +63,7 @@ function TenantPayments({ tenantId }) {
     </table>
   );
 }
-export default function Tenants({ onNavigate, highlightId, showPayments }) {
+export default function Tenants({ onNavigate, highlightId, showPayments, refreshTrigger }) {
   const [tenants, setTenants] = useState([]);
   const [objects, setObjects] = useState([]);
   const [search, setSearch] = useState('');
@@ -93,6 +93,12 @@ export default function Tenants({ onNavigate, highlightId, showPayments }) {
   const DADATA_TOKEN = '7be74127271a523420eaf85a792d97badec52201';
 
   useEffect(() => { fetchAll(false); }, []);
+
+  const firstRefresh = React.useRef(true);
+  useEffect(() => {
+    if (firstRefresh.current) { firstRefresh.current = false; return; }
+    fetchAll(true);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     if (highlightId && tenants.length > 0) {
