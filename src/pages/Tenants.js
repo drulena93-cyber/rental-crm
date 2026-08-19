@@ -63,6 +63,27 @@ function TenantPayments({ tenantId }) {
     </table>
   );
 }
+function InfoTip({ text }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      style={{position:'relative', display:'inline-flex', marginLeft:3}}>
+      <span style={{cursor:'help', color:'#534AB7', fontWeight:700, fontSize:10, border:'1px solid #534AB7', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center', background:'#fff'}}>!</span>
+      {show && (
+        <span style={{
+          position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
+          background:'#333', color:'#fff', fontSize:11, fontWeight:400, padding:'6px 10px', borderRadius:6,
+          whiteSpace:'nowrap', zIndex:200, boxShadow:'0 2px 8px rgba(0,0,0,0.25)'
+        }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function Tenants({ onNavigate, highlightId, showPayments }) {
   const [tenants, setTenants] = useState([]);
   const [objects, setObjects] = useState([]);
@@ -238,10 +259,11 @@ setObjectTenants(otData.rows || []);
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterShared && (filterShared === 'да' ? !t.shared : t.shared)) return false;
     if (filterObject === '__NONE__') {
-      if (t.object_id) return false;
+      if (objectTenants.some(ot => ot.tenant_id === t.id)) return false;
     } else if (filterObject) {
-      const tenantObj = objects.find(o => o.id === t.object_id);
-      if (!tenantObj || tenantObj.type !== filterObject) return false;
+      const ids = objectTenants.filter(ot => ot.tenant_id === t.id).map(ot => ot.object_id);
+      const tenantObjs = objects.filter(o => ids.includes(o.id));
+      if (!tenantObjs.some(o => o.type === filterObject)) return false;
     }
     if (filterFloor) {
       const ids = objectTenants.filter(ot => ot.tenant_id === t.id).map(ot => ot.object_id);
@@ -261,7 +283,7 @@ setObjectTenants(otData.rows || []);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const active = tenants.filter(t => t.status === 'Активный');
-  const withoutObj = tenants.filter(t => !t.object_id);
+  const withoutObj = tenants.filter(t => !objectTenants.some(ot => ot.tenant_id === t.id));
   const floors = [...new Set(objects.map(o => o.floor).filter(f => f !== null && f !== undefined && f !== ''))].sort((a,b)=>a-b);
   const today = new Date();
 
@@ -438,7 +460,7 @@ const getTenantObjects = (tenantId) => {
         </div>
         <div style={statPill('blue')}>
           <span style={{color:'#6b6b75'}}>Показанное:</span><span style={pillValue('blue')}>{filtered.length}</span>
-          <span title="Количество арендаторов, которые видны сейчас с учётом применённых фильтров" style={{cursor:'help', marginLeft:2, color:'#185FA5', fontWeight:700, fontSize:10, border:'1px solid #185FA5', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>!</span>
+          <InfoTip text="Количество арендаторов, которые видны сейчас с учётом применённых фильтров" />
         </div>
         <input placeholder="Поиск по имени..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterType} onChange={e => setFilterType(e.target.value)}>
