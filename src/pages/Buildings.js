@@ -407,7 +407,10 @@ export default function Buildings({ onNavigate }) {
   return (
     <div>
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8, marginBottom:12}}>
-        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{allStats.всего}</span></div>
+        <div style={statPill('purple')}>
+          <span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{allStats.всего}</span>
+          <span title="Всего помещений" style={{cursor:'help', marginLeft:2, color:'#534AB7', fontWeight:700, fontSize:10, border:'1px solid #534AB7', borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'}}>!</span>
+        </div>
         <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Сдано:</span><span style={pillValue('green')}>{allStats.сдано}</span></div>
         <div style={statPill('red')}><span style={{color:'#6b6b75'}}>Свободно:</span><span style={pillValue('red')}>{allStats.неСдано}</span></div>
         <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>Площадь:</span><span style={pillValue('gray')}>{Math.round(allStats.площадьСдано).toLocaleString('ru-RU')} / {Math.round(allStats.площадьВсего).toLocaleString('ru-RU')} м²</span></div>
@@ -536,9 +539,21 @@ export default function Buildings({ onNavigate }) {
               <tr style={{fontWeight:600, background:'#f9f9fb', borderTop:'2px solid #e5e5ea'}}>
                 <td>Итого</td>
                 <td style={{textAlign:'center', color:'#aaa'}}>—</td>
-                <td style={{textAlign:'center'}}>{filteredTotals.всего}</td>
-                <td style={{textAlign:'center', color:'#3B6D11'}}>{filteredTotals.сдано}</td>
-                <td style={{textAlign:'center', color: filteredTotals.неСдано > 0 ? '#A32D2D' : '#888'}}>{filteredTotals.неСдано}</td>
+                <td style={{textAlign:'center', cursor:'pointer', textDecoration:'underline', color:'#534AB7'}}
+                  title="Перейти в Объекты"
+                  onClick={() => onNavigate('objects', null, { filterStatus: '' })}>
+                  {filteredTotals.всего}
+                </td>
+                <td style={{textAlign:'center', color:'#3B6D11', cursor:'pointer', textDecoration:'underline'}}
+                  title="Перейти в Объекты со статусом «Сдано»"
+                  onClick={() => onNavigate('objects', null, { filterStatus: 'Сдано' })}>
+                  {filteredTotals.сдано}
+                </td>
+                <td style={{textAlign:'center', color: filteredTotals.неСдано > 0 ? '#A32D2D' : '#888', cursor:'pointer', textDecoration:'underline'}}
+                  title="Перейти в Объекты со статусом «Не сдано»"
+                  onClick={() => onNavigate('objects', null, { filterStatus: 'Не сдано' })}>
+                  {filteredTotals.неСдано}
+                </td>
                 <td style={{textAlign:'right', fontSize:12}}>{Math.round(filteredTotals.площадьВсего).toLocaleString('ru-RU')}</td>
                 <td style={{textAlign:'right', fontSize:12}}>{filteredTotals.аренда > 0 ? filteredTotals.аренда.toLocaleString('ru-RU') : '—'}</td>
                 <td style={{textAlign:'right', fontSize:12}}>{filteredTotals.коммуналка > 0 ? filteredTotals.коммуналка.toLocaleString('ru-RU') : '—'}</td>
