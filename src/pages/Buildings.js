@@ -207,7 +207,7 @@ function BuildingKeysSection({ buildingType }) {
   );
 }
 
-export default function Buildings({ onNavigate }) {
+export default function Buildings({ onNavigate, refreshTrigger }) {
   const CACHE_KEY = 'buildings_cache';
   const CACHE_TIME_KEY = 'buildings_cache_time';
   const CACHE_TTL = 60 * 1000;
@@ -227,6 +227,12 @@ export default function Buildings({ onNavigate }) {
   const [editingValue, setEditingValue] = useState('');
 
   useEffect(() => { fetchAll(false); }, []);
+
+  const firstRefresh = React.useRef(true);
+  useEffect(() => {
+    if (firstRefresh.current) { firstRefresh.current = false; return; }
+    fetchAll(true);
+  }, [refreshTrigger]);
 
   async function fetchAll(forceRefresh = false) {
     if (!forceRefresh) {
