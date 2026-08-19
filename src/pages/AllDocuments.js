@@ -168,11 +168,6 @@ export default function AllDocuments({ onNavigate }) {
     amber:  { bg:'#FBEEDA', border:'#F0CE8E', text:'#8A5A0B' },
     gray:   { bg:'#EDEDF2', border:'#D2D2DC', text:'#4a4a55' },
   };
-  const statPill = (tone = 'gray') => {
-    const c = PILL[tone] || PILL.gray;
-    return { background:c.bg, border:`1px solid ${c.border}`, borderRadius:8, padding:'6px 12px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
-  };
-  const pillValue = (tone = 'gray') => ({ fontWeight:700, color:(PILL[tone] || PILL.gray).text });
   const tagStyle = (active) => ({
     background: active ? '#534AB7' : PILL.gray.bg,
     color: active ? '#fff' : '#3f3f4a',
@@ -184,11 +179,6 @@ export default function AllDocuments({ onNavigate }) {
   return (
     <div>
       <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
-        <div style={statPill('purple')}><span style={{color:'#6b6b75'}}>Всего:</span><span style={pillValue('purple')}>{documents.length}</span></div>
-        <div style={statPill('blue')}><span style={{color:'#6b6b75'}}>Договоров:</span><span style={pillValue('blue')}>{documents.filter(d => d.type === 'Договор').length}</span></div>
-        <div style={statPill('green')}><span style={{color:'#6b6b75'}}>Актов:</span><span style={pillValue('green')}>{documents.filter(d => d.type === 'Акт').length}</span></div>
-        <div style={statPill('amber')}><span style={{color:'#6b6b75'}}>Счетов:</span><span style={pillValue('amber')}>{documents.filter(d => d.type === 'Счёт').length}</span></div>
-        <div style={statPill('gray')}><span style={{color:'#6b6b75'}}>Показано:</span><span style={pillValue('gray')}>{filtered.length}</span></div>
         <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
         <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
           <option value="">Все арендаторы</option>
