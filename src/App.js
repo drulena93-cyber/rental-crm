@@ -23,9 +23,11 @@ export default function App() {
   const [showChangelog, setShowChangelog] = useState(false);
   const [seenCount, setSeenCount] = useState(() => parseInt(localStorage.getItem('changelog_seen_count') || '0'));
   const [globalStats, setGlobalStats] = useState({ сдано: null, свободно: null });
+  const [globalRefreshing, setGlobalRefreshing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  useEffect(() => {
-    fetch('/api/db', {
+  function fetchGlobalStats() {
+    return fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -38,7 +40,15 @@ export default function App() {
       const свободно = rows.find(r => r.status === 'Не сдано')?.cnt || 0;
       setGlobalStats({ сдано: parseInt(сдано), свободно: parseInt(свободно) });
     }).catch(() => {});
-  }, []);
+  }
+
+  useEffect(() => { fetchGlobalStats(); }, []);
+
+  function handleGlobalRefresh() {
+    setGlobalRefreshing(true);
+    fetchGlobalStats().finally(() => setGlobalRefreshing(false));
+    setRefreshTrigger(t => t + 1);
+  }
 
   const unreadCount = Math.max(0, CHANGELOG.length - seenCount);
 
@@ -113,7 +123,7 @@ export default function App() {
     <div className="app">
       <div className="topbar">
         <div className="logo">🏢 CRM Аренда</div>
-        <nav className="tabs">
+        <nav className="tabs" style={{display:'flex', alignItems:'center'}}>
           {navStack.length > 0 && (
             <button onClick={handleBack}
               style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer', marginRight:8, whiteSpace:'nowrap'}}>
@@ -132,15 +142,19 @@ export default function App() {
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => handleTabClick('settings')}>⚙️ Настройки</button>
           <div style={{flex:1}} />
           {globalStats.сдано !== null && (
-            <div style={{display:'flex', gap:6, marginRight:6}}>
-              <span style={{background:'#E1F3D8', border:'1px solid #B7DDA0', color:'#2F6B0C', borderRadius:8, padding:'4px 9px', fontSize:11, fontWeight:600, whiteSpace:'nowrap'}}>
+            <div style={{display:'flex', alignItems:'center', gap:6, marginRight:6}}>
+              <span style={{background:'#E1F3D8', border:'1px solid #B7DDA0', color:'#2F6B0C', borderRadius:6, padding:'6px 12px', fontSize:13, fontWeight:600, whiteSpace:'nowrap', display:'inline-flex', alignItems:'center'}}>
                 Сдано: {globalStats.сдано}
               </span>
-              <span style={{background:'#FBE1E1', border:'1px solid #EFB3B3', color:'#A32D2D', borderRadius:8, padding:'4px 9px', fontSize:11, fontWeight:600, whiteSpace:'nowrap'}}>
+              <span style={{background:'#FBE1E1', border:'1px solid #EFB3B3', color:'#A32D2D', borderRadius:6, padding:'6px 12px', fontSize:13, fontWeight:600, whiteSpace:'nowrap', display:'inline-flex', alignItems:'center'}}>
                 Свободно: {globalStats.свободно}
               </span>
             </div>
           )}
+          <button onClick={handleGlobalRefresh} disabled={globalRefreshing}
+            style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap', marginRight:6}}>
+            {globalRefreshing ? '⏳ Обновление...' : '🔄 Обновить'}
+          </button>
           <div style={{position:'relative', marginLeft:4}}>
             <button onClick={toggleChangelog}
               title="История изменений"
@@ -211,14 +225,14 @@ export default function App() {
         </div>
       )}
       <div className="content">
-        {tab === 'buildings' && <Buildings onNavigate={handleNavigate} />}
-        {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} initialFilterStatus={objectsFilterStatus} />}
-        {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} showPayments={showPaymentsTab} />}
-        {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} />}
-        {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} />}
+        {tab === 'buildings' && <Buildings onNavigate={handleNavigate} refreshTrigger={refreshTrigger} />}
+        {tab === 'objects' && <Objects onNavigate={handleNavigate} highlightId={highlightId} initialFilterStatus={objectsFilterStatus} refreshTrigger={refreshTrigger} />}
+        {tab === 'tenants' && <Tenants onNavigate={handleNavigate} highlightId={highlightId} showPayments={showPaymentsTab} refreshTrigger={refreshTrigger} />}
+        {tab === 'contacts' && <Contacts onNavigate={handleNavigate} tenantId={contactTenantId} refreshTrigger={refreshTrigger} />}
+        {tab === 'documents' && <AllDocuments onNavigate={handleNavigate} refreshTrigger={refreshTrigger} />}
         {tab === 'generation' && <InvoiceGeneration onNavigate={handleNavigate} initialData={generationData} />}
         {tab === 'payments' && <Payments onNavigate={handleNavigate} />}
-        {tab === 'analytics' && <Analytics onNavigate={handleNavigate} />}
+        {tab === 'analytics' && <Analytics onNavigate={handleNavigate} refreshTrigger={refreshTrigger} />}
         {tab === 'trash' && <Trash />}
         {tab === 'settings' && <Settings />}
       </div>
