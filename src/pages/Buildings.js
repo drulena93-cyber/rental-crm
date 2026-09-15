@@ -225,6 +225,7 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
   const [buildingNames2, setBuildingNames2] = useState({});
   const [editingBuilding, setEditingBuilding] = useState(null);
   const [editingValue, setEditingValue] = useState('');
+  const [editingTypeValue, setEditingTypeValue] = useState('');
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -285,29 +286,46 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
     setRefreshing(false);
   }
 
-  async function saveBuilding(type, displayName) {
+  async function saveBuilding(oldType, newType, displayName) {
+    const typeChanged = newType && newType !== oldType;
+
+    if (typeChanged) {
+      const affected = objects.filter(o => o.type === oldType).length;
+      const ok = window.confirm(
+        `Переименовать технический тип у ${affected} объект(ов): «${oldType}» → «${newType}»?\n\n` +
+        `Это изменит данные во всей базе (в том числе то, что видит Финансы), не только отображаемое имя в CRM.`
+      );
+      if (!ok) return;
+
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `UPDATE objects SET type = $1 WHERE type = $2`,
+          params: [newType, oldType]
+        })
+      });
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `DELETE FROM buildings WHERE type = $1`, params: [oldType] })
+      });
+    }
+
+    const finalType = typeChanged ? newType : oldType;
     await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: `INSERT INTO buildings (type, display_name) VALUES ($1, $2)
                 ON CONFLICT (type) DO UPDATE SET display_name = EXCLUDED.display_name`,
-        params: [type, displayName]
+        params: [finalType, displayName]
       })
     });
-    setBuildingNames2(prev => {
-      const updated = { ...prev, [type]: { ...prev[type], display_name: displayName } };
-      try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const d = JSON.parse(cached);
-          d.bldMap = updated;
-          localStorage.setItem(CACHE_KEY, JSON.stringify(d));
-        }
-      } catch (e) {}
-      return updated;
-    });
+
     setEditingBuilding(null);
+    if (typeChanged) setSelectedBuilding(null);
+    fetchAll(true);
   }
 
   const buildings = {};
@@ -484,22 +502,34 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
                     style={{cursor:'pointer', background: isSelected ? '#f0f0ff' : 'inherit'}}>
                     <td style={{fontWeight:500}}>
                       {editingBuilding === name ? (
-                        <div style={{display:'flex', gap:6, alignItems:'center'}} onClick={e => e.stopPropagation()}>
-                          <input autoFocus value={editingValue}
-                            onChange={e => setEditingValue(e.target.value)}
-                            onKeyDown={e => { if(e.key==='Enter') saveBuilding(name, editingValue); if(e.key==='Escape') setEditingBuilding(null); }}
-                            style={{padding:'4px 8px', borderRadius:6, border:'1px solid #534AB7', fontSize:13, width:160}} />
-                          <button onClick={() => saveBuilding(name, editingValue)}
-                            style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>✓</button>
-                          <button onClick={() => setEditingBuilding(null)}
-                            style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:14}}>✕</button>
+                        <div style={{display:'flex', flexDirection:'column', gap:4, alignItems:'flex-start'}} onClick={e => e.stopPropagation()}>
+                          <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                            <span style={{fontSize:11, color:'#888', width:120}}>Отображаемое:</span>
+                            <input autoFocus value={editingValue}
+                              onChange={e => setEditingValue(e.target.value)}
+                              onKeyDown={e => { if(e.key==='Enter') saveBuilding(name, editingTypeValue, editingValue); if(e.key==='Escape') setEditingBuilding(null); }}
+                              style={{padding:'4px 8px', borderRadius:6, border:'1px solid #534AB7', fontSize:13, width:160}} />
+                          </div>
+                          <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                            <span style={{fontSize:11, color:'#888', width:120}}>Техническое (тип):</span>
+                            <input value={editingTypeValue}
+                              onChange={e => setEditingTypeValue(e.target.value)}
+                              onKeyDown={e => { if(e.key==='Enter') saveBuilding(name, editingTypeValue, editingValue); if(e.key==='Escape') setEditingBuilding(null); }}
+                              style={{padding:'4px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13, width:160}} />
+                          </div>
+                          <div style={{display:'flex', gap:6}}>
+                            <button onClick={() => saveBuilding(name, editingTypeValue, editingValue)}
+                              style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>✓ Сохранить</button>
+                            <button onClick={() => setEditingBuilding(null)}
+                              style={{background:'none', border:'1px solid #ddd', borderRadius:6, color:'#888', cursor:'pointer', fontSize:12, padding:'4px 10px'}}>Отмена</button>
+                          </div>
                         </div>
                       ) : (
                         <div style={{display:'flex', alignItems:'center', gap:8}}>
                           <span style={{color:'#534AB7'}}>
                             {buildingNames2[name]?.display_name || name}
                           </span>
-                          <button onClick={e => { e.stopPropagation(); setEditingBuilding(name); setEditingValue(buildingNames2[name]?.display_name || name); }}
+                          <button onClick={e => { e.stopPropagation(); setEditingBuilding(name); setEditingValue(buildingNames2[name]?.display_name || name); setEditingTypeValue(name); }}
                             style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:12, padding:'2px 4px'}}>
                             ✎
                           </button>
