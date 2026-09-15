@@ -290,8 +290,9 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: `UPDATE buildings SET display_name = $1 WHERE type = $2`,
-        params: [displayName, type]
+        query: `INSERT INTO buildings (type, display_name) VALUES ($1, $2)
+                ON CONFLICT (type) DO UPDATE SET display_name = EXCLUDED.display_name`,
+        params: [type, displayName]
       })
     });
     setBuildingNames2(prev => {
