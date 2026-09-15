@@ -1000,7 +1000,14 @@ for (const r of rows) {
             </div>
             <div className="form-group"><label>Название *</label><input value={form.name||''} onChange={e => setForm({...form, name: e.target.value})} /></div>
             <div className="form-grid">
-              <div className="form-group"><label>Тип</label><input value={form.type||''} onChange={e => setForm({...form, type: e.target.value})} /></div>
+              <div className="form-group">
+                <label>Тип (здание)</label>
+                <input list="building-types-list" value={form.type||''} onChange={e => setForm({...form, type: e.target.value})}
+                  placeholder="Выберите существующее или впишите новое" />
+                <datalist id="building-types-list">
+                  {types.map(t => <option key={t} value={t} />)}
+                </datalist>
+              </div>
               <div className="form-group"><label>Статус</label>
                 <select value={form.status||''} onChange={e => setForm({...form, status: e.target.value})}>
                   <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
