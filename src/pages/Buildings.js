@@ -1,61 +1,80 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabaseClient';
+import React, { useState, useEffect } from 'react';
 
-const PAGE_SIZE = 30;
-const CACHE_KEY = 'objects_cache';
-const CACHE_TIME_KEY = 'objects_cache_time';
-const CACHE_TTL = 60 * 1000;
+const STATUS_COLORS = {
+  'Сдано':        { bg: '#EAF3DE', color: '#3B6D11' },
+  'Не сдано':     { bg: '#FCEBEB', color: '#A32D2D' },
+  'Не учитывать': { bg: '#f0f0f0', color: '#999' },
+  'default':      { bg: '#f4f4f8', color: '#555' },
+};
 
-async function dbQuery(sql, params = []) {
-  const res = await fetch('/api/db', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: sql, params })
-  });
-  const data = await res.json();
-  return data.rows || [];
+function getStatusStyle(status) {
+  return STATUS_COLORS[status] || STATUS_COLORS['default'];
 }
 
-// ── Компонент ключей ──────────────────────────────────────────────────────
-function KeysSection({ objectId }) {
+// ── Компонент ключей здания ───────────────────────────────────────────────
+function BuildingKeysSection({ buildingType }) {
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingKey, setEditingKey] = useState(null);
-  const [form, setForm] = useState({ key_number: '', status: 'В офисе', issued_to: '', issued_date: '', comment: '' });
+  const [form, setForm] = useState({ key_number: '', status: 'В картотеке', issued_to: '', issued_date: '', comment: '' });
 
-  useEffect(() => { fetchKeys(); }, [objectId]);
+  useEffect(() => { fetchKeys(); }, [buildingType]);
 
   async function fetchKeys() {
     setLoading(true);
-    const rows = await dbQuery(`SELECT * FROM object_keys WHERE object_id = $1 ORDER BY key_number::integer NULLS LAST, created_at`, [objectId]);
-    setKeys(rows);
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT * FROM object_keys WHERE building_type = $1 AND object_id IS NULL ORDER BY key_number::integer NULLS LAST, created_at`,
+        params: [buildingType]
+      })
+    });
+    const data = await res.json();
+    setKeys(data.rows || []);
     setLoading(false);
   }
 
   async function saveKey() {
     if (!form.key_number) return alert('Введите номер ключа');
     if (editingKey) {
-      await dbQuery(`UPDATE object_keys SET key_number=$1, status=$2, issued_to=$3, issued_date=$4, comment=$5 WHERE id=$6`,
-        [form.key_number, form.status, form.issued_to || null, form.issued_date || null, form.comment || null, editingKey]);
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `UPDATE object_keys SET key_number=$1, status=$2, issued_to=$3, issued_date=$4, comment=$5 WHERE id=$6`,
+          params: [form.key_number, form.status, form.issued_to || null, form.issued_date || null, form.comment || null, editingKey]
+        })
+      });
     } else {
-      await dbQuery(`INSERT INTO object_keys (object_id, key_number, status, issued_to, issued_date, comment) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [objectId, form.key_number, form.status, form.issued_to || null, form.issued_date || null, form.comment || null]);
+      await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `INSERT INTO object_keys (building_type, key_number, status, issued_to, issued_date, comment) VALUES ($1,$2,$3,$4,$5,$6)`,
+          params: [buildingType, form.key_number, form.status, form.issued_to || null, form.issued_date || null, form.comment || null]
+        })
+      });
     }
     setShowForm(false);
     setEditingKey(null);
-    setForm({ key_number: '', status: 'В офисе', issued_to: '', issued_date: '', comment: '' });
+    setForm({ key_number: '', status: 'В картотеке', issued_to: '', issued_date: '', comment: '' });
     fetchKeys();
   }
 
   async function deleteKey(id) {
     if (!window.confirm('Удалить ключ?')) return;
-    await dbQuery(`DELETE FROM object_keys WHERE id=$1`, [id]);
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `DELETE FROM object_keys WHERE id=$1`, params: [id] })
+    });
     fetchKeys();
   }
 
   function openEdit(k) {
-    setForm({ key_number: k.key_number || '', status: k.status || 'В офисе', issued_to: k.issued_to || '', issued_date: k.issued_date || '', comment: k.comment || '' });
+    setForm({ key_number: k.key_number || '', status: k.status || 'В картотеке', issued_to: k.issued_to || '', issued_date: k.issued_date || '', comment: k.comment || '' });
     setEditingKey(k.id);
     setShowForm(true);
   }
@@ -68,48 +87,47 @@ function KeysSection({ objectId }) {
   }
 
   const statusColor = (s) => {
-  if (s === 'У арендатора') return { bg: '#E6F1FB', color: '#185FA5' };
-  if (s === 'В картотеке') return { bg: '#EAF3DE', color: '#3B6D11' };
-  if (s === 'Другое') return { bg: '#FAEEDA', color: '#854F0B' };
-  return { bg: '#f4f4f8', color: '#555' };
-};
+    if (s === 'У арендатора') return { bg: '#E6F1FB', color: '#185FA5' };
+    if (s === 'В картотеке') return { bg: '#EAF3DE', color: '#3B6D11' };
+    if (s === 'Другое') return { bg: '#FAEEDA', color: '#854F0B' };
+    return { bg: '#f4f4f8', color: '#555' };
+  };
 
-  const total = keys.length;
   const уАрендатора = keys.filter(k => k.status === 'У арендатора').length;
-const вКартотеке = keys.filter(k => k.status === 'В картотеке').length;
-const другое = keys.filter(k => k.status === 'Другое').length;
+  const вКартотеке = keys.filter(k => k.status === 'В картотеке').length;
+  const другое = keys.filter(k => k.status === 'Другое').length;
 
   return (
-    <div className="linked-section">
-      <div className="linked-title" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <span>🔑 Ключи</span>
+    <div style={{marginTop:16, borderTop:'1px solid #e5e5e5', paddingTop:12}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+        <div style={{fontSize:12, fontWeight:600, color:'#534AB7'}}>🔑 Ключи здания</div>
         <button onClick={openAdd}
-          style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>
+          style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'3px 10px', fontSize:11, cursor:'pointer'}}>
           + Добавить
         </button>
       </div>
 
       {/* Сводка */}
-      {total > 0 && (
-        <div style={{display:'flex', gap:12, fontSize:12, marginBottom:10, flexWrap:'wrap'}}>
-          <span>🔑 Всего: <b>{total}</b></span>
+      {keys.length > 0 && (
+        <div style={{display:'flex', gap:10, fontSize:11, marginBottom:8, flexWrap:'wrap'}}>
+          <span>🔑 Всего: <b>{keys.length}</b></span>
           <span style={{color:'#185FA5'}}>👤 У арендатора: <b>{уАрендатора}</b></span>
-<span style={{color:'#3B6D11'}}>🗄 В картотеке: <b>{вКартотеке}</b></span>
-{другое > 0 && <span style={{color:'#854F0B'}}>📌 Другое: <b>{другое}</b></span>}
+          <span style={{color:'#3B6D11'}}>🗄 В картотеке: <b>{вКартотеке}</b></span>
+          {другое > 0 && <span style={{color:'#854F0B'}}>📌 Другое: <b>{другое}</b></span>}
         </div>
       )}
 
-      {loading ? <div style={{fontSize:12, color:'#aaa'}}>Загрузка...</div> :
-       keys.length === 0 ? <div style={{fontSize:12, color:'#aaa', padding:'8px 0'}}>Ключи не добавлены</div> : (
-        <table style={{fontSize:12, width:'100%'}}>
+      {loading ? <div style={{fontSize:11, color:'#aaa'}}>Загрузка...</div> :
+       keys.length === 0 ? <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>Ключи не добавлены</div> : (
+        <table style={{fontSize:11, width:'100%', marginBottom:8}}>
           <thead>
             <tr>
-              <th style={{textAlign:'center', width:40}}>№</th>
+              <th style={{textAlign:'center', width:30}}>№</th>
               <th>Статус</th>
               <th>Выдан кому</th>
-              <th>Дата выдачи</th>
+              <th>Дата</th>
               <th>Комментарий</th>
-              <th style={{width:60}}></th>
+              <th style={{width:50}}></th>
             </tr>
           </thead>
           <tbody>
@@ -119,7 +137,7 @@ const другое = keys.filter(k => k.status === 'Другое').length;
                 <tr key={k.id}>
                   <td style={{textAlign:'center', fontWeight:600}}>{k.key_number}</td>
                   <td>
-                    <span style={{background:st.bg, color:st.color, borderRadius:4, padding:'2px 8px', fontSize:11, fontWeight:500}}>
+                    <span style={{background:st.bg, color:st.color, borderRadius:4, padding:'1px 6px', fontSize:10, fontWeight:500}}>
                       {k.status}
                     </span>
                   </td>
@@ -128,9 +146,9 @@ const другое = keys.filter(k => k.status === 'Другое').length;
                   <td style={{color:'#888'}}>{k.comment || '—'}</td>
                   <td>
                     <button onClick={() => openEdit(k)}
-                      style={{background:'none', border:'none', color:'#534AB7', cursor:'pointer', marginRight:6}}>✎</button>
+                      style={{background:'none', border:'none', color:'#534AB7', cursor:'pointer', marginRight:4, fontSize:11}}>✎</button>
                     <button onClick={() => deleteKey(k.id)}
-                      style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer'}}>✕</button>
+                      style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:11}}>✕</button>
                   </td>
                 </tr>
               );
@@ -140,43 +158,48 @@ const другое = keys.filter(k => k.status === 'Другое').length;
       )}
 
       {showForm && (
-        <div style={{marginTop:12, background:'#f8f8f8', borderRadius:8, padding:12}}>
-          <div style={{fontWeight:500, fontSize:13, marginBottom:10}}>
+        <div style={{background:'#f0f0ff', borderRadius:8, padding:10, marginTop:8}}>
+          <div style={{fontSize:12, fontWeight:500, marginBottom:8}}>
             {editingKey ? 'Редактировать ключ' : 'Новый ключ'}
           </div>
-          <div style={{display:'grid', gridTemplateColumns:'80px 1fr 1fr', gap:8, marginBottom:8}}>
-            <div className="form-group"><label style={{fontSize:12}}>№ ключа</label>
+          <div style={{display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:6, marginBottom:6}}>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>№ ключа</div>
               <input value={form.key_number} onChange={e => setForm({...form, key_number: e.target.value})}
-                style={{width:'100%', padding:'5px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
             </div>
-            <div className="form-group"><label style={{fontSize:12}}>Статус</label>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Статус</div>
               <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
-  style={{width:'100%', padding:'5px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
-  <option>У арендатора</option>
-  <option>В картотеке</option>
-  <option>Другое</option>
-</select>
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}}>
+                <option>У арендатора</option>
+                <option>В картотеке</option>
+                <option>Другое</option>
+              </select>
             </div>
-            <div className="form-group"><label style={{fontSize:12}}>Дата выдачи</label>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Дата выдачи</div>
               <input type="date" value={form.issued_date} onChange={e => setForm({...form, issued_date: e.target.value})}
-                style={{width:'100%', padding:'5px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
             </div>
           </div>
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10}}>
-            <div className="form-group"><label style={{fontSize:12}}>Выдан кому</label>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:8}}>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Выдан кому</div>
               <input value={form.issued_to} onChange={e => setForm({...form, issued_to: e.target.value})}
                 placeholder="ФИО или организация"
-                style={{width:'100%', padding:'5px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
             </div>
-            <div className="form-group"><label style={{fontSize:12}}>Комментарий</label>
+            <div>
+              <div style={{fontSize:10, color:'#888', marginBottom:2}}>Комментарий</div>
               <input value={form.comment} onChange={e => setForm({...form, comment: e.target.value})}
                 placeholder="Необязательно..."
-                style={{width:'100%', padding:'5px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+                style={{width:'100%', padding:'4px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:12}} />
             </div>
           </div>
-          <div style={{display:'flex', gap:8}}>
-            <button className="btn-save" onClick={saveKey}>Сохранить</button>
-            <button className="btn-cancel" onClick={() => { setShowForm(false); setEditingKey(null); }}>Отмена</button>
+          <div style={{display:'flex', gap:6}}>
+            <button className="btn-save" onClick={saveKey} style={{fontSize:12, padding:'5px 12px'}}>Сохранить</button>
+            <button className="btn-cancel" onClick={() => { setShowForm(false); setEditingKey(null); }} style={{fontSize:12, padding:'5px 12px'}}>Отмена</button>
           </div>
         </div>
       )}
@@ -184,189 +207,32 @@ const другое = keys.filter(k => k.status === 'Другое').length;
   );
 }
 
-// ── Компонент истории ─────────────────────────────────────────────────────
-function HistorySection({ objectId, tenants, onNavigate }) {
-  const [history, setHistory] = useState([]);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState({ tenant_id: '', tenant_name: '', date_from: '', date_to: '', comment: '' });
-  useEffect(() => { fetchHistory(); }, [objectId]);
-  async function fetchHistory() {
-    const res = await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `SELECT * FROM object_history WHERE object_id = $1 ORDER BY date_to DESC NULLS FIRST`,
-        params: [objectId]
-      })
-    });
-    const data = await res.json();
-    setHistory(data.rows || []);
-  }
-  async function addHistory() {
-    if (!form.tenant_name && !form.tenant_id) return alert('Укажите арендатора');
-    const tenantName = form.tenant_id ? tenants.find(t => t.id === form.tenant_id)?.name || form.tenant_name : form.tenant_name;
-    await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, false)`,
-        params: [objectId, form.tenant_id || null, tenantName, form.date_from || null, form.date_to || null, form.comment || null]
-      })
-    });
-    setShowAddForm(false);
-    setForm({ tenant_id: '', tenant_name: '', date_from: '', date_to: '', comment: '' });
-    fetchHistory();
-  }
-  async function deleteHistory(id) {
-    if (!window.confirm('Удалить запись?')) return;
-    await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: `DELETE FROM object_history WHERE id = $1`, params: [id] })
-    });
-    fetchHistory();
-  }
-  return (
-    <div className="linked-section">
-      <div className="linked-title" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <span>📋 История объекта</span>
-        <button onClick={() => setShowAddForm(!showAddForm)}
-          style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>
-          + Добавить
-        </button>
-      </div>
-      {showAddForm && (
-        <div style={{background:'#f8f8f8', borderRadius:8, padding:12, marginBottom:12}}>
-          <div style={{marginBottom:8}}>
-            <label style={{fontSize:12, color:'#888'}}>Арендатор из списка</label>
-            <select value={form.tenant_id} onChange={e => setForm({...form, tenant_id: e.target.value})}
-              style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4}}>
-              <option value="">— Выберите или введите вручную —</option>
-              {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          {!form.tenant_id && (
-            <div style={{marginBottom:8}}>
-              <label style={{fontSize:12, color:'#888'}}>Или введите имя вручную</label>
-              <input value={form.tenant_name} onChange={e => setForm({...form, tenant_name: e.target.value})}
-                placeholder="ФИО / название"
-                style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4, boxSizing:'border-box'}} />
-            </div>
-          )}
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8}}>
-            <div>
-              <label style={{fontSize:12, color:'#888'}}>Дата с</label>
-              <input type="date" value={form.date_from} onChange={e => setForm({...form, date_from: e.target.value})}
-                style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4}} />
-            </div>
-            <div>
-              <label style={{fontSize:12, color:'#888'}}>Дата по</label>
-              <input type="date" value={form.date_to} onChange={e => setForm({...form, date_to: e.target.value})}
-                style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4}} />
-            </div>
-          </div>
-          <div style={{marginBottom:8}}>
-            <label style={{fontSize:12, color:'#888'}}>Комментарий</label>
-            <input value={form.comment} onChange={e => setForm({...form, comment: e.target.value})}
-              placeholder="Комментарий..."
-              style={{width:'100%', padding:'6px', borderRadius:6, border:'1px solid #ddd', fontSize:13, marginTop:4, boxSizing:'border-box'}} />
-          </div>
-          <div style={{display:'flex', gap:8}}>
-            <button className="btn-save" onClick={addHistory}>Сохранить</button>
-            <button className="btn-cancel" onClick={() => setShowAddForm(false)}>Отмена</button>
-          </div>
-        </div>
-      )}
-      {history.length === 0 ? (
-        <div style={{color:'#aaa', fontSize:13, padding:'8px 0'}}>История пуста</div>
-      ) : (
-        <table style={{fontSize:12}}>
-          <thead>
-            <tr><th>Арендатор</th><th>С</th><th>По</th><th>Комментарий</th><th style={{width:40}}></th></tr>
-          </thead>
-          <tbody>
-            {history.map(h => (
-              <tr key={h.id}>
-                <td>
-                  {h.tenant_id
-                    ? <span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}} onClick={() => onNavigate('tenants', h.tenant_id)}>
-                        {h.tenant_name}{h.auto && <span style={{color:'#aaa', fontSize:10, marginLeft:4}}>(авто)</span>}
-                      </span>
-                    : <span>{h.tenant_name}</span>
-                  }
-                </td>
-                <td>{h.date_from ? new Date(h.date_from).toLocaleDateString('ru-RU') : '—'}</td>
-                <td>{h.date_to ? new Date(h.date_to).toLocaleDateString('ru-RU') : '—'}</td>
-                <td style={{maxWidth:200, wordBreak:'break-word'}} title={h.comment}>{h.comment || '—'}</td>
-                <td><button onClick={() => deleteHistory(h.id)} style={{background:'none', border:'none', color:'#A32D2D', cursor:'pointer', fontSize:12}}>✕</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
+export default function Buildings({ onNavigate, refreshTrigger }) {
+  const CACHE_KEY = 'buildings_cache';
+  const CACHE_TIME_KEY = 'buildings_cache_time';
+  const CACHE_TTL = 60 * 1000;
 
-export default function Objects({ onNavigate, highlightId, initialFilterStatus, refreshTrigger }) {
   const [objects, setObjects] = useState([]);
-  const [tenants, setTenants] = useState([]);
-  const [objectTenants, setObjectTenants] = useState([]);
-  const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('objects_filterStatus') || '');
-
-  useEffect(() => {
-    if (initialFilterStatus) setFilterStatus(initialFilterStatus);
-  }, [initialFilterStatus]);
-  const [filterFloor, setFilterFloor] = useState(() => localStorage.getItem('objects_filterFloor') || '');
-  const [filterType, setFilterType] = useState(() => localStorage.getItem('objects_filterType') || '');
-  const [filterShared, setFilterShared] = useState(() => localStorage.getItem('objects_filterShared') || '');
-  const [filterTenant, setFilterTenant] = useState(() => localStorage.getItem('objects_filterTenant') || '');
-  const [filterKeys, setFilterKeys] = useState('');
-  const [selected, setSelected] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [editingStatus, setEditingStatus] = useState(null);
-  const [editingField, setEditingField] = useState(null);
-  const [editingValue, setEditingValue] = useState('');
-  const [sortField, setSortField] = useState(() => localStorage.getItem('objects_sortField') || 'name');
-  const [sortDir, setSortDir] = useState(() => localStorage.getItem('objects_sortDir') || 'asc');
-  const [showTenantsModal, setShowTenantsModal] = useState(false);
-  const [selectedObjectForTenants, setSelectedObjectForTenants] = useState(null);
-  const [objectTenantsList, setObjectTenantsList] = useState([]);
-  const [addingTenant, setAddingTenant] = useState('');
-  const [showNewTenantFromObject, setShowNewTenantFromObject] = useState(false);
-  const [newTenantForm, setNewTenantForm] = useState({});
-  const [page, setPage] = useState(() => parseInt(localStorage.getItem('objects_page') || '1'));
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [checkoutData, setCheckoutData] = useState({ tenantId: '', tenantName: '', objectId: '', date: '', comment: '' });
-  const [objectKeys, setObjectKeys] = useState({});
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterAreaMin, setFilterAreaMin] = useState('');
+  const [filterAreaMax, setFilterAreaMax] = useState('');
+  const [filterRentMin, setFilterRentMin] = useState('');
+  const [filterRentMax, setFilterRentMax] = useState('');
+  const [buildingNames2, setBuildingNames2] = useState({});
+  const [editingBuilding, setEditingBuilding] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
 
   useEffect(() => { fetchAll(false); }, []);
 
-  const firstRefresh = useRef(true);
+  const firstRefresh = React.useRef(true);
   useEffect(() => {
     if (firstRefresh.current) { firstRefresh.current = false; return; }
     fetchAll(true);
   }, [refreshTrigger]);
-  useEffect(() => {
-    if (highlightId && objects.length > 0) {
-      const o = objects.find(o => o.id === highlightId);
-      if (o) { setSelected(o); window.scrollTo(0, 0); }
-    }
-  }, [highlightId, objects]);
-  useEffect(() => { localStorage.setItem('objects_page', String(page)); }, [page]);
-  useEffect(() => { setPage(1); }, [search, filterStatus, filterFloor, filterType, filterShared, filterTenant, filterKeys]);
-  useEffect(() => { localStorage.setItem('objects_filterStatus', filterStatus); }, [filterStatus]);
-  useEffect(() => { localStorage.setItem('objects_filterFloor', filterFloor); }, [filterFloor]);
-  useEffect(() => { localStorage.setItem('objects_filterType', filterType); }, [filterType]);
-  useEffect(() => { localStorage.setItem('objects_filterShared', filterShared); }, [filterShared]);
-  useEffect(() => { localStorage.setItem('objects_filterTenant', filterTenant); }, [filterTenant]);
-  useEffect(() => { localStorage.setItem('objects_sortField', sortField); }, [sortField]);
-  useEffect(() => { localStorage.setItem('objects_sortDir', sortDir); }, [sortDir]);
 
   async function fetchAll(forceRefresh = false) {
     if (!forceRefresh) {
@@ -374,253 +240,148 @@ export default function Objects({ onNavigate, highlightId, initialFilterStatus, 
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       if (cached && cachedTime && Date.now() - parseInt(cachedTime) < CACHE_TTL) {
         try {
-          const { objs, tens, ot } = JSON.parse(cached);
+          const { objs, bldMap } = JSON.parse(cached);
           setObjects(objs || []);
-          setTenants(tens || []);
-          setObjectTenants(ot || []);
+          setBuildingNames2(bldMap || {});
           setLastUpdated(new Date(parseInt(cachedTime)));
           setLoading(false);
-          await fetchAllKeys(objs || []);
           return;
-        } catch(e) {}
+        } catch (e) {}
       }
     }
     forceRefresh ? setRefreshing(true) : setLoading(true);
-    const { data: objs } = await supabase.from('objects').select('*').is('deleted_at', null).order('name');
-    const { data: tens } = await supabase.from('tenants').select('*').is('deleted_at', null).order('name');
-    const ot = await dbQuery(`SELECT ot.*, t.name as tenant_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id WHERE t.deleted_at IS NULL`);
+    const [res, bldRes] = await Promise.all([
+      fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `SELECT o.*, t.name as tenant_name
+                  FROM objects o
+                  LEFT JOIN object_tenants ot ON ot.object_id = o.id
+                  LEFT JOIN tenants t ON t.id = ot.tenant_id
+                  WHERE o.deleted_at IS NULL AND o.type IS NOT NULL
+                  ORDER BY o.type, o.floor NULLS LAST, o.name`,
+          params: []
+        })
+      }),
+      fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `SELECT * FROM buildings ORDER BY display_name`, params: [] })
+      })
+    ]);
+    const data = await res.json();
+    const bldData = await bldRes.json();
+    const bldMap = {};
+    for (const b of bldData.rows || []) bldMap[b.type] = b;
+
     const now = Date.now();
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ objs, tens, ot }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ objs: data.rows || [], bldMap }));
     localStorage.setItem(CACHE_TIME_KEY, String(now));
-    setObjects(objs || []);
-    setTenants(tens || []);
-    setObjectTenants(ot || []);
+    setObjects(data.rows || []);
+    setBuildingNames2(bldMap);
     setLastUpdated(new Date(now));
     setLoading(false);
     setRefreshing(false);
-    await fetchAllKeys(objs || []);
   }
 
-  async function fetchAllKeys(objs) {
-    if (!objs.length) return;
-    const rows = await dbQuery(`SELECT object_id, status FROM object_keys`);
-    const map = {};
-for (const r of rows) {
-  if (!map[r.object_id]) map[r.object_id] = { total: 0, уАрендатора: 0, вКартотеке: 0, другое: 0 };
-  map[r.object_id].total++;
-  if (r.status === 'У арендатора') map[r.object_id].уАрендатора++;
-  if (r.status === 'В картотеке') map[r.object_id].вКартотеке++;
-  if (r.status === 'Другое') map[r.object_id].другое++;
-}
-    setObjectKeys(map);
-  }
-
-  async function fetchObjectTenants(objectId) {
-    const rows = await dbQuery(`SELECT ot.*, t.name as tenant_name FROM object_tenants ot JOIN tenants t ON t.id = ot.tenant_id WHERE ot.object_id = $1 AND t.deleted_at IS NULL ORDER BY ot.is_primary DESC, t.name ASC`, [objectId]);
-    setObjectTenantsList(rows);
-  }
-
-  function openTenantsModal(o) {
-    setSelectedObjectForTenants(o);
-    setShowTenantsModal(true);
-    fetchObjectTenants(o.id);
-    setAddingTenant('');
-  }
-
-  async function addTenantToObject(tenantId) {
-    if (!tenantId) return;
-    await dbQuery(`INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`, [selectedObjectForTenants.id, tenantId]);
-    await fetchObjectTenants(selectedObjectForTenants.id);
-    await fetchAll(true);
-    setAddingTenant('');
-  }
-
-  async function removeTenantFromObject(id) {
-    if (!window.confirm('Убрать арендатора с объекта?')) return;
-    await dbQuery(`DELETE FROM object_tenants WHERE id = $1`, [id]);
-    await fetchObjectTenants(selectedObjectForTenants.id);
-    await fetchAll(true);
-  }
-
-  async function setPrimaryTenant(id) {
-    await dbQuery(`UPDATE object_tenants SET is_primary = false WHERE object_id = $1`, [selectedObjectForTenants.id]);
-    await dbQuery(`UPDATE object_tenants SET is_primary = true WHERE id = $1`, [id]);
-    await fetchObjectTenants(selectedObjectForTenants.id);
-    await fetchAll(true);
-  }
-
-  async function saveNewTenantFromObject() {
-    if (!newTenantForm.name) return alert('Введите имя арендатора');
-    const res = await fetch('/api/db', {
+  async function saveBuilding(type, displayName) {
+    await fetch('/api/db', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: `INSERT INTO tenants (name, type, status, activity, comments, object_id, shared, contract_end) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-        params: [newTenantForm.name, newTenantForm.type||'ФИЗ.ЛИЦО', newTenantForm.status||'Активный', newTenantForm.activity||null, newTenantForm.comments||null, newTenantForm.object_id||null, false, newTenantForm.contract_end||null]
+        query: `INSERT INTO buildings (type, display_name) VALUES ($1, $2)
+                ON CONFLICT (type) DO UPDATE SET display_name = EXCLUDED.display_name`,
+        params: [type, displayName]
       })
     });
-    const data = await res.json();
-    const newTenantId = data.rows?.[0]?.id;
-    if (newTenantId && newTenantForm.object_id) {
-      await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `INSERT INTO object_tenants (object_id, tenant_id, is_primary) VALUES ($1,$2,false) ON CONFLICT DO NOTHING`,
-          params: [newTenantForm.object_id, newTenantId]
-        })
-      });
-    }
-    setShowNewTenantFromObject(false);
-    setNewTenantForm({});
-    fetchAll(true);
-  }
-
-  function handleSort(field) {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortField(field); setSortDir('asc'); }
-  }
-
-  function sortIcon(field) {
-    if (sortField !== field) return <span style={{color:'#ccc', marginLeft:4}}>↕</span>;
-    return <span style={{marginLeft:4}}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
-  }
-
-  const types = [...new Set(objects.map(o => o.type).filter(Boolean))];
-  const floors = [...new Set(objects.map(o => o.floor).filter(Boolean))].sort((a,b)=>a-b);
-  const getObjectTenants = (id) => objectTenants.filter(ot => ot.object_id === id);
-
-  const filtered = objects.filter(o => {
-    if (search && !o.name?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterStatus && o.status !== filterStatus) return false;
-    if (filterFloor && o.floor !== parseInt(filterFloor)) return false;
-    if (filterType === '__NONE__') {
-      if (o.type) return false;
-    } else if (filterType && o.type !== filterType) return false;
-    if (filterShared && (filterShared === 'да' ? !o.shared : o.shared)) return false;
-    if (filterTenant && !getObjectTenants(o.id).find(ot => ot.tenant_id === filterTenant)) return false;
-    if (filterKeys) {
-  const k = objectKeys[o.id];
-  if (filterKeys === 'есть' && !k) return false;
-  if (filterKeys === 'нет' && k) return false;
-  if (filterKeys === 'у_арендатора' && (!k || k.уАрендатора === 0)) return false;
-  if (filterKeys === 'в_картотеке' && (!k || k.вКартотеке === 0)) return false;
-  if (filterKeys === 'другое' && (!k || k.другое === 0)) return false;
-}
-    return true;
-  }).sort((a, b) => {
-    let va = a[sortField], vb = b[sortField];
-    if (va == null) va = ''; if (vb == null) vb = '';
-    if (sortField === 'office') {
-      const na = parseInt(va) || 0;
-      const nb = parseInt(vb) || 0;
-      if (na !== nb) return sortDir === 'asc' ? na - nb : nb - na;
-    }
-    if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
-    return sortDir === 'asc' ? String(va).localeCompare(String(vb), 'ru') : String(vb).localeCompare(String(va), 'ru');
-  });
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const rented = objects.filter(o => o.status === 'Сдано');
-  const free = objects.filter(o => o.status === 'Не сдано');
-
-  async function quickUpdate(id, field, value) {
-    const now = new Date().toISOString();
-    await supabase.from('objects').update({ [field]: value, updated_at: now }).eq('id', id);
-    const updated = objects.map(o => o.id === id ? { ...o, [field]: value, updated_at: now } : o);
-    setObjects(updated);
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
+    setBuildingNames2(prev => {
+      const updated = { ...prev, [type]: { ...prev[type], display_name: displayName } };
       try {
-        const data = JSON.parse(cached);
-        data.objs = updated;
-        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-      } catch(e) {}
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const d = JSON.parse(cached);
+          d.bldMap = updated;
+          localStorage.setItem(CACHE_KEY, JSON.stringify(d));
+        }
+      } catch (e) {}
+      return updated;
+    });
+    setEditingBuilding(null);
+  }
+
+  const buildings = {};
+  for (const obj of objects) {
+    if (!buildings[obj.type]) buildings[obj.type] = [];
+    buildings[obj.type].push(obj);
+  }
+
+  function getBuildingStats(objs) {
+    const учитываемые = objs.filter(o => o.status !== 'Не учитывать');
+    const неУчитываемые = objs.filter(o => o.status === 'Не учитывать');
+    const сдано = учитываемые.filter(o => o.status === 'Сдано');
+    const неСдано = учитываемые.filter(o => o.status === 'Не сдано');
+    const площадьВсего = учитываемые.reduce((s, o) => s + (parseFloat(o.area) || 0), 0);
+    const площадьСдано = сдано.reduce((s, o) => s + (parseFloat(o.area) || 0), 0);
+    const аренда = сдано.reduce((s, o) => s + (parseFloat(o.rent) || 0), 0);
+    const коммуналка = сдано.reduce((s, o) => s + (parseFloat(o.utility_cost) || 0), 0);
+    const этажи = [...new Set(учитываемые.map(o => o.floor).filter(Boolean))];
+    return {
+      всего: objs.length,
+      сдано: сдано.length,
+      неСдано: неСдано.length,
+      неУчитывать: неУчитываемые.length,
+      площадьВсего,
+      площадьСдано,
+      аренда,
+      коммуналка,
+      этажей: этажи.length,
+    };
+  }
+
+  function getFloors(objs) {
+    const floors = {};
+    for (const obj of objs) {
+      const floor = obj.floor !== null ? obj.floor : 'other';
+      if (!floors[floor]) floors[floor] = [];
+      floors[floor].push(obj);
     }
-    setEditingField(null);
+    return floors;
   }
 
-  function openAdd() { setForm({ status: 'Не сдано', shared: false, address: 'Г.САРАТОВ. ' }); setShowForm(true); }
-  function openEdit(o) {
-    const autoAddress = o.address || `Г.САРАТОВ. ${o.type ? o.type + '. ' : ''}${o.name}${o.floor ? ', ' + o.floor + ' этаж' : ''}${o.area ? ', ' + o.area + ' кв. м.' : ''}`;
-    setForm({ ...o, address: autoAddress });
-    setShowForm(true);
-    setSelected(null);
+  function getShortLabel(obj) {
+    if (obj.office) return obj.office;
+    const parts = obj.name.trim().split(' ');
+    return parts[parts.length - 1];
   }
 
-  async function saveForm() {
-    if (!form.name) return alert('Введите название объекта');
-    const now = new Date().toISOString();
-    if (form.id) await supabase.from('objects').update({ ...form, updated_at: now }).eq('id', form.id);
-    else await supabase.from('objects').insert({ ...form, updated_at: now });
-    setShowForm(false);
-    fetchAll(true);
-  }
+  if (loading) return <p>Загрузка...</p>;
 
-  async function deleteObj(id) {
-    if (!window.confirm('Переместить объект в корзину?')) return;
-    await supabase.from('objects').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-    setSelected(null);
-    fetchAll(true);
-  }
+  const buildingNames = Object.keys(buildings).sort();
 
-  async function confirmCheckout() {
-    try {
-      await supabase.from('tenants').update({ status: 'Съехал' }).eq('id', checkoutData.tenantId);
-      await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `INSERT INTO object_history (object_id, tenant_id, tenant_name, date_from, date_to, comment, auto) VALUES ($1, $2, $3, $4, $5, $6, false)`,
-          params: [checkoutData.objectId, checkoutData.tenantId, checkoutData.tenantName, checkoutData.contractStart || checkoutData.createdAt?.split('T')[0] || null, checkoutData.date, checkoutData.comment || 'Съехал']
-        })
-      });
-      await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: `DELETE FROM object_tenants WHERE tenant_id = $1`, params: [checkoutData.tenantId] })
-      });
-      await supabase.from('tenants').update({
-        object_id: null,
-        comments: checkoutData.comment ? `Съехал ${checkoutData.date}: ${checkoutData.comment}` : `Съехал ${checkoutData.date}`
-      }).eq('id', checkoutData.tenantId);
-      const remainRes = await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: `SELECT COUNT(*) as cnt FROM object_tenants WHERE object_id = $1`, params: [checkoutData.objectId] })
-      });
-      const remainData = await remainRes.json();
-      if (parseInt(remainData.rows?.[0]?.cnt || 0) === 0) {
-        await supabase.from('objects').update({ status: 'Не сдано' }).eq('id', checkoutData.objectId);
-      }
-      setShowCheckout(false);
-      setCheckoutData({ tenantId: '', tenantName: '', objectId: '', date: '', comment: '' });
-      fetchAll(true);
-      setSelected(null);
-    } catch(e) { alert('Ошибка: ' + e.message); }
-  }
-
-  function statusBadge(o) {
-    const s = o.status;
-    const cls = s === 'Сдано' ? 'badge-green' : s === 'Не сдано' ? 'badge-red' : s === 'Освобождается с 1 числа' ? 'badge-amber' : 'badge-gray';
-    return <span className={`badge ${cls}`} style={{cursor:'pointer'}} onClick={e => { e.stopPropagation(); setEditingStatus(o.id); }}>{s} ▾</span>;
-  }
-
-  function formatDateTime(dt) {
-    if (!dt) return '—';
-    const d = new Date(dt);
-    return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
-  }
-
-  const thStyle = {cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'};
-  const tagStyle = (active) => ({
-    background: active ? '#534AB7' : PILL.gray.bg,
-    color: active ? '#fff' : '#3f3f4a',
-    border: active ? '1px solid #534AB7' : `1px solid ${PILL.gray.border}`,
-    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
-    boxShadow: active ? '0 1px 3px rgba(83,74,183,0.35)' : 'none'
+  const filteredBuildings = buildingNames.filter(name => {
+    const s = getBuildingStats(buildings[name]);
+    if (filterStatus === 'Сдано' && s.сдано === 0) return false;
+    if (filterStatus === 'Не сдано' && s.неСдано === 0) return false;
+    if (filterAreaMin && s.площадьВсего < parseFloat(filterAreaMin)) return false;
+    if (filterAreaMax && s.площадьВсего > parseFloat(filterAreaMax)) return false;
+    if (filterRentMin && s.аренда < parseFloat(filterRentMin)) return false;
+    if (filterRentMax && s.аренда > parseFloat(filterRentMax)) return false;
+    return true;
   });
+
+  const filteredTotals = filteredBuildings.reduce((acc, name) => {
+    const s = getBuildingStats(buildings[name]);
+    acc.всего += s.всего;
+    acc.сдано += s.сдано;
+    acc.неСдано += s.неСдано;
+    acc.неУчитывать += s.неУчитывать;
+    acc.площадьВсего += s.площадьВсего;
+    acc.аренда += s.аренда;
+    acc.коммуналка += s.коммуналка;
+    return acc;
+  }, { всего: 0, сдано: 0, неСдано: 0, неУчитывать: 0, площадьВсего: 0, аренда: 0, коммуналка: 0 });
+
   const PILL = {
     purple: { bg:'#EDEAFB', border:'#C9BFF2', text:'#534AB7' },
     green:  { bg:'#E1F3D8', border:'#B7DDA0', text:'#2F6B0C' },
@@ -628,452 +389,265 @@ for (const r of rows) {
     blue:   { bg:'#DCEBFA', border:'#A8CDEF', text:'#185FA5' },
     gray:   { bg:'#EDEDF2', border:'#D2D2DC', text:'#4a4a55' },
   };
+  const statPill = (tone = 'gray') => {
+    const c = PILL[tone] || PILL.gray;
+    return { background:c.bg, border:`1px solid ${c.border}`, borderRadius:8, padding:'6px 12px', fontSize:12, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' };
+  };
+  const pillValue = (tone = 'gray') => ({ fontWeight:700, color:(PILL[tone] || PILL.gray).text });
+  const tagStyle = (active) => ({
+    background: active ? '#534AB7' : PILL.gray.bg,
+    color: active ? '#fff' : '#3f3f4a',
+    border: active ? '1px solid #534AB7' : `1px solid ${PILL.gray.border}`,
+    borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+    boxShadow: active ? '0 1px 3px rgba(83,74,183,0.35)' : 'none'
+  });
 
   return (
     <div>
-      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8}}>
-        <input placeholder="Поиск по названию..." value={search} onChange={e => setSearch(e.target.value)} style={{minWidth:160}} />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="">Все статусы</option>
-          <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
-        </select>
-        <select value={filterFloor} onChange={e => setFilterFloor(e.target.value)}>
-          <option value="">Все этажи</option>
-          {floors.map(f => <option key={f} value={f}>{f} этаж</option>)}
-        </select>
-        <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}>
-          <option value="">Все арендаторы</option>
-          {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select value={filterShared} onChange={e => setFilterShared(e.target.value)}>
-          <option value="">Совместное: все</option>
-          <option value="да">Да</option><option value="нет">Нет</option>
-        </select>
-        <select value={filterKeys} onChange={e => setFilterKeys(e.target.value)}>
-  <option value="">Ключи: все</option>
-  <option value="есть">Есть ключи</option>
-  <option value="нет">Нет ключей</option>
-  <option value="у_арендатора">У арендатора</option>
-  <option value="в_картотеке">В картотеке</option>
-  <option value="другое">Другое</option>
-</select>
-        {(filterStatus || filterFloor || filterType || filterShared || filterTenant || filterKeys || search) && (
-          <button onClick={() => { setFilterStatus(''); setFilterFloor(''); setFilterType(''); setFilterShared(''); setFilterTenant(''); setFilterKeys(''); setSearch(''); }}
-            style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
-            ✕ Сбросить фильтры
+      <div className="toolbar" style={{flexWrap:'wrap', alignItems:'center', gap:8, marginBottom:12}}>
+        <span style={{fontSize:12, color:'#888', marginLeft:4}}>Статус:</span>
+        <button onClick={() => { setFilterStatus(''); setSelectedBuilding(null); }} style={tagStyle(filterStatus === '')}>Все статусы</button>
+        <button onClick={() => { setFilterStatus('Сдано'); setSelectedBuilding(null); }} style={tagStyle(filterStatus === 'Сдано')}>Есть сданные</button>
+        <button onClick={() => { setFilterStatus('Не сдано'); setSelectedBuilding(null); }} style={tagStyle(filterStatus === 'Не сдано')}>Есть свободные</button>
+        <div style={{display:'flex', alignItems:'center', gap:4, fontSize:13}}>
+          <span style={{color:'#888'}}>Площадь:</span>
+          <input type="number" placeholder="от" value={filterAreaMin} onChange={e => setFilterAreaMin(e.target.value)}
+            style={{width:70, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+          <span style={{color:'#888'}}>—</span>
+          <input type="number" placeholder="до" value={filterAreaMax} onChange={e => setFilterAreaMax(e.target.value)}
+            style={{width:70, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+          <span style={{color:'#888'}}>м²</span>
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap:4, fontSize:13}}>
+          <span style={{color:'#888'}}>Аренда:</span>
+          <input type="number" placeholder="от" value={filterRentMin} onChange={e => setFilterRentMin(e.target.value)}
+            style={{width:90, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+          <span style={{color:'#888'}}>—</span>
+          <input type="number" placeholder="до" value={filterRentMax} onChange={e => setFilterRentMax(e.target.value)}
+            style={{width:90, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}} />
+          <span style={{color:'#888'}}>₽</span>
+        </div>
+        {(filterStatus || filterAreaMin || filterAreaMax || filterRentMin || filterRentMax) && (
+          <button onClick={() => { setFilterStatus(''); setFilterAreaMin(''); setFilterAreaMax(''); setFilterRentMin(''); setFilterRentMax(''); }}
+            style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer'}}>
+            ✕ Сбросить
           </button>
         )}
-        <button className="btn-add" onClick={openAdd}>+ Добавить объект</button>
         <button onClick={() => fetchAll(true)} disabled={refreshing}
-          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'7px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
+          style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 12px', fontSize:13, cursor:'pointer', whiteSpace:'nowrap'}}>
           {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
         </button>
       </div>
 
-      <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:12, alignItems:'center'}}>
-        <span style={{fontSize:12, color:'#888', marginRight:2}}>Тип:</span>
-        <button onClick={() => setFilterType('')} style={tagStyle(filterType === '')}>Все типы</button>
-        <button onClick={() => setFilterType('__NONE__')} style={tagStyle(filterType === '__NONE__')}>Тип не указан</button>
-        {types.map(t => (
-          <button key={t} onClick={() => setFilterType(t)} style={tagStyle(filterType === t)}>{t}</button>
+      {lastUpdated && (
+        <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>
+          Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}
+        </div>
+      )}
+
+      <div style={{display:'flex', gap:16, marginBottom:12}}>
+        {Object.entries(STATUS_COLORS).filter(([k]) => k !== 'default').map(([status, style]) => (
+          <div key={status} style={{display:'flex', alignItems:'center', gap:6, fontSize:12}}>
+            <div style={{width:12, height:12, borderRadius:3, background:style.bg, border:`1px solid ${style.color}`}} />
+            {status}
+          </div>
         ))}
       </div>
 
-      {lastUpdated && <div style={{fontSize:11, color:'#aaa', marginBottom:8}}>Данные загружены: {lastUpdated.toLocaleTimeString('ru-RU')}</div>}
-
-      {loading ? <p>Загрузка...</p> : (
-        <>
-          <div style={{overflowX:'auto'}}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={thStyle} onClick={() => handleSort('name')}>Название{sortIcon('name')}</th>
-                  <th style={thStyle} onClick={() => handleSort('type')}>Тип{sortIcon('type')}</th>
-                  <th style={thStyle} onClick={() => handleSort('status')}>Статус{sortIcon('status')}</th>
-                  <th style={thStyle} onClick={() => handleSort('floor')}>Этаж{sortIcon('floor')}</th>
-                  <th style={thStyle} onClick={() => handleSort('office')}>№ оф/кв{sortIcon('office')}</th>
-                  <th style={thStyle} onClick={() => handleSort('area')}>Площадь{sortIcon('area')}</th>
-                  <th>Арендаторы</th>
-                  <th style={thStyle} onClick={() => handleSort('rent')}>₽/мес{sortIcon('rent')}</th>
-                  <th style={thStyle} onClick={() => handleSort('utility_cost')}>Коммуналка ₽{sortIcon('utility_cost')}</th>
-                  <th>Вид коммуналки</th>
-                  <th style={thStyle} onClick={() => handleSort('payment')}>Оплата{sortIcon('payment')}</th>
-                  <th>Совместное</th>
-                  <th>🔑</th>
-                  <th>Комментарии</th>
-                  <th style={thStyle} onClick={() => handleSort('updated_at')}>Изменён{sortIcon('updated_at')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map(o => {
-                  const ots = getObjectTenants(o.id);
-                  const keys = objectKeys[o.id];
-                  return (
-                    <tr key={o.id} onClick={() => setSelected(o)}>
-                      <td>{o.name}</td>
-                      <td>{o.type}</td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {editingStatus === o.id ? (
-                          <select autoFocus value={o.status||''} onChange={e => { quickUpdate(o.id, 'status', e.target.value); setEditingStatus(null); }} onBlur={() => setEditingStatus(null)}>
-                            <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
-                          </select>
-                        ) : statusBadge(o)}
-                      </td>
-                      <td>{o.floor || '—'}</td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {editingField === o.id+'_office' ? (
-                          <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => quickUpdate(o.id, 'office', editingValue)}
-                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'office', editingValue); if(e.key==='Escape') setEditingField(null); }}
-                            style={{width:80}} />
-                        ) : (
-                          <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_office'); setEditingValue(o.office||''); }}>
-                            {o.office || '— ✎'}
-                          </span>
-                        )}
-                      </td>
-                      <td>{o.area ? `${o.area} м²` : '—'}</td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div style={{display:'flex', flexDirection:'column', gap:2}}>
-                          {ots.length === 0 && <span style={{color:'#aaa'}}>—</span>}
-                          {ots.map(ot => (
-                            <span key={ot.id} style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline', fontSize:12, display:'flex', alignItems:'center', gap:4}}
-                              onClick={() => onNavigate('tenants', ot.tenant_id)}>
-                              {ot.is_primary && <span style={{color:'#f59e0b', fontSize:10}}>★</span>}
-                              {ot.tenant_name}
-                            </span>
-                          ))}
-                          <span style={{color:'#534AB7', cursor:'pointer', fontSize:11, marginTop:2}} onClick={() => openTenantsModal(o)}>✎ изменить</span>
+      <div style={{display:'grid', gridTemplateColumns: selectedBuilding ? '1fr 1fr' : '1fr', gap:12, alignItems:'start'}}>
+        <div style={{overflowX:'auto'}}>
+          <table>
+            <thead>
+              <tr>
+                <th>Здание</th>
+                <th style={{textAlign:'center'}}>Этажей</th>
+                <th style={{textAlign:'center'}}>Всего</th>
+                <th style={{textAlign:'center'}}>Сдано</th>
+                <th style={{textAlign:'center'}}>Своб.</th>
+                <th style={{textAlign:'center', color:'#888'}}>Не учит.</th>
+                <th style={{textAlign:'right'}}>Площадь м²</th>
+                <th style={{textAlign:'right'}}>Аренда ₽</th>
+                <th style={{textAlign:'right'}}>Коммун. ₽</th>
+                <th style={{textAlign:'right'}}>Итого ₽</th>
+                <th style={{minWidth:100}}>Заполн.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBuildings.map(name => {
+                const s = getBuildingStats(buildings[name]);
+                const pct = (s.сдано + s.неСдано) > 0 ? Math.round((s.сдано / (s.сдано + s.неСдано)) * 100) : 0;
+                const barColor = pct === 100 ? '#3B6D11' : pct > 50 ? '#534AB7' : '#f0a500';
+                const isSelected = selectedBuilding === name;
+                return (
+                  <tr key={name}
+                    onClick={() => setSelectedBuilding(isSelected ? null : name)}
+                    style={{cursor:'pointer', background: isSelected ? '#f0f0ff' : 'inherit'}}>
+                    <td style={{fontWeight:500}}>
+                      {editingBuilding === name ? (
+                        <div style={{display:'flex', gap:6, alignItems:'center'}} onClick={e => e.stopPropagation()}>
+                          <input autoFocus value={editingValue}
+                            onChange={e => setEditingValue(e.target.value)}
+                            onKeyDown={e => { if(e.key==='Enter') saveBuilding(name, editingValue); if(e.key==='Escape') setEditingBuilding(null); }}
+                            style={{padding:'4px 8px', borderRadius:6, border:'1px solid #534AB7', fontSize:13, width:160}} />
+                          <button onClick={() => saveBuilding(name, editingValue)}
+                            style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>✓</button>
+                          <button onClick={() => setEditingBuilding(null)}
+                            style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:14}}>✕</button>
                         </div>
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {editingField === o.id+'_rent' ? (
-                          <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => quickUpdate(o.id, 'rent', parseFloat(editingValue))}
-                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'rent', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
-                            style={{width:90}} />
-                        ) : (
-                          <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_rent'); setEditingValue(o.rent||''); }}>
-                            {o.rent ? o.rent.toLocaleString('ru-RU')+' ₽' : '— ✎'}
+                      ) : (
+                        <div style={{display:'flex', alignItems:'center', gap:8}}>
+                          <span style={{color:'#534AB7'}}>
+                            {buildingNames2[name]?.display_name || name}
                           </span>
-                        )}
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {editingField === o.id+'_utility' ? (
-                          <input autoFocus type="number" value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => quickUpdate(o.id, 'utility_cost', parseFloat(editingValue))}
-                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'utility_cost', parseFloat(editingValue)); if(e.key==='Escape') setEditingField(null); }}
-                            style={{width:90}} />
-                        ) : (
-                          <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_utility'); setEditingValue(o.utility_cost||''); }}>
-                            {o.utility_cost ? o.utility_cost.toLocaleString('ru-RU')+' ₽' : '— ✎'}
-                          </span>
-                        )}
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <select value={o.utility_type||''} onChange={e => quickUpdate(o.id, 'utility_type', e.target.value)}
-                          style={{fontSize:12, border:'1px solid #ddd', borderRadius:4, padding:'2px 4px'}}>
-                          <option value="">Не указано</option>
-                          <option>Фиксированная</option><option>По счётчику</option>
-                        </select>
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {editingField === o.id+'_payment' ? (
-                          <input autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => quickUpdate(o.id, 'payment', editingValue)}
-                            onKeyDown={e => { if(e.key==='Enter') quickUpdate(o.id, 'payment', editingValue); if(e.key==='Escape') setEditingField(null); }}
-                            style={{width:120}} />
-                        ) : (
-                          <span style={{cursor:'pointer'}} onClick={() => { setEditingField(o.id+'_payment'); setEditingValue(o.payment||''); }}>
-                            {o.payment || '— ✎'}
-                          </span>
-                        )}
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={o.shared||false} onChange={e => quickUpdate(o.id, 'shared', e.target.checked)} />
-                      </td>
-                      <td style={{fontSize:11, whiteSpace:'nowrap'}}>
-                        {keys ? (
-                          <span style={{color: keys.выдано > 0 ? '#185FA5' : keys.утеряно > 0 ? '#A32D2D' : '#3B6D11', cursor:'pointer'}}
-                            onClick={() => setSelected(o)}>
-                            🔑{keys.total} {keys.выдано > 0 && <span style={{color:'#185FA5'}}>↑{keys.выдано}</span>}
-                            {keys.утеряно > 0 && <span style={{color:'#A32D2D'}}> ⚠{keys.утеряно}</span>}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td onClick={e => e.stopPropagation()} style={{minWidth:220}}>
-                        {editingField === o.id+'_comments' ? (
-                          <textarea autoFocus value={editingValue} onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => quickUpdate(o.id, 'comments', editingValue)}
-                            onKeyDown={e => { if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); quickUpdate(o.id, 'comments', editingValue); } if(e.key==='Escape') setEditingField(null); }}
-                            style={{width:220, resize:'vertical', minHeight:32}} />
-                        ) : (
-                          <span style={{cursor:'pointer', display:'block', whiteSpace:'pre-wrap', wordBreak:'break-word'}}
-                            onClick={() => { setEditingField(o.id+'_comments'); setEditingValue(o.comments||''); }}>
-                            {o.comments || '— ✎'}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{formatDateTime(o.updated_at)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {totalPages > 1 && (
-            <div style={{display:'flex', alignItems:'center', gap:8, marginTop:12, justifyContent:'center'}}>
-              <button onClick={() => setPage(1)} disabled={page === 1}
-                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>«</button>
-              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
-                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===1?0.4:1}}>‹</button>
-              {Array.from({length: totalPages}, (_, i) => i+1).filter(p => Math.abs(p - page) <= 2).map(p => (
-                <button key={p} onClick={() => setPage(p)}
-                  style={{background: p===page ? '#534AB7' : '#f4f4f8', color: p===page ? '#fff' : '#333',
-                    border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, fontWeight: p===page?600:400}}>
-                  {p}
-                </button>
-              ))}
-              <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
-                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>›</button>
-              <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
-                style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:13, opacity: page===totalPages?0.4:1}}>»</button>
-            </div>
-          )}
-        </>
-      )}
-
-      <div className="page-info">Показано {((page-1)*PAGE_SIZE)+1}–{Math.min(page*PAGE_SIZE, filtered.length)} из {filtered.length} (всего {objects.length})</div>
-
-      {/* Модальное окно объекта */}
-      {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:680}}>
-            <div className="modal-title">
-              {selected.name}
-              <button className="modal-close" onClick={() => setSelected(null)}>✕ Закрыть</button>
-            </div>
-            <div className="detail-row"><div className="detail-key">Статус</div><div className="detail-val">{selected.status}</div></div>
-            <div className="detail-row"><div className="detail-key">Тип</div><div className="detail-val">{selected.type||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Этаж</div><div className="detail-val">{selected.floor||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">№ оф/кв</div><div className="detail-val">{selected.office||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Площадь</div><div className="detail-val">{selected.area ? `${selected.area} м²` : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">₽/мес</div><div className="detail-val">{selected.rent ? selected.rent.toLocaleString('ru-RU')+' ₽' : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Коммуналка</div><div className="detail-val">{selected.utility_cost ? selected.utility_cost.toLocaleString('ru-RU')+' ₽' : '—'} {selected.utility_type ? `(${selected.utility_type})` : ''}</div></div>
-            <div className="detail-row"><div className="detail-key">Оплата помещения</div><div className="detail-val">{selected.payment||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Совместное пользование</div><div className="detail-val">{selected.shared ? 'Да' : 'Нет'}</div></div>
-            <div className="detail-row"><div className="detail-key">Адрес для договора</div><div className="detail-val" style={{fontSize:12}}>{selected.address||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Яндекс Диск</div><div className="detail-val">{selected.yandex_link ? <a href={selected.yandex_link} target="_blank" rel="noreferrer">Открыть папку</a> : '—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Комментарии</div><div className="detail-val">{selected.comments||'—'}</div></div>
-            <div className="detail-row"><div className="detail-key">Изменён</div><div className="detail-val">{formatDateTime(selected.updated_at)}</div></div>
-
-            <div className="linked-section">
-              <div className="linked-title">Арендаторы</div>
-              {getObjectTenants(selected.id).length === 0
-                ? <div style={{color:'#aaa', fontSize:13}}>Не привязаны</div>
-                : getObjectTenants(selected.id).map(ot => (
-                  <div key={ot.id} className="linked-item" style={{display:'flex', alignItems:'center', gap:6, justifyContent:'space-between'}}>
-                    <span style={{cursor:'pointer', color:'#534AB7'}}
-                      onClick={() => { setSelected(null); onNavigate('tenants', ot.tenant_id); }}>
-                      {ot.is_primary && <span style={{color:'#f59e0b'}}>★</span>}
-                      → {ot.tenant_name}
-                    </span>
-                    <button onClick={e => { e.stopPropagation(); const tenantData = tenants.find(t => t.id === ot.tenant_id); setCheckoutData({ tenantId: ot.tenant_id, tenantName: ot.tenant_name, objectId: selected.id, date: new Date().toISOString().split('T')[0], comment: '', contractStart: tenantData?.contract_start || tenantData?.created_at?.split('T')[0] || null, createdAt: tenantData?.created_at || null }); setShowCheckout(true); }}
-                      style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'3px 8px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap'}}>
-                      🚪 Съехал
-                    </button>
-                  </div>
-                ))
-              }
-              <div style={{marginTop:8}}>
-                <button style={{background:'#534AB7', color:'#fff', border:'none', borderRadius:6, padding:'6px 12px', fontSize:12, cursor:'pointer'}}
-                  onClick={() => { setSelected(null); openTenantsModal(selected); }}>
-                  ✎ Управлять арендаторами
-                </button>
-              </div>
-            </div>
-
-            <KeysSection objectId={selected.id} />
-            <HistorySection objectId={selected.id} tenants={tenants} onNavigate={onNavigate} />
-
-            <div className="form-actions">
-              <button className="btn-cancel" onClick={() => deleteObj(selected.id)}>В корзину</button>
-              <button className="btn-save" onClick={() => openEdit(selected)}>Редактировать</button>
-            </div>
-          </div>
+                          <button onClick={e => { e.stopPropagation(); setEditingBuilding(name); setEditingValue(buildingNames2[name]?.display_name || name); }}
+                            style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:12, padding:'2px 4px'}}>
+                            ✎
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                    <td style={{textAlign:'center'}}>{s.этажей || '—'}</td>
+                    <td style={{textAlign:'center'}}>{s.всего}</td>
+                    <td style={{textAlign:'center', color:'#3B6D11', fontWeight:500}}>{s.сдано}</td>
+                    <td style={{textAlign:'center', color: s.неСдано > 0 ? '#A32D2D' : '#888', fontWeight: s.неСдано > 0 ? 500 : 400}}>{s.неСдано}</td>
+                    <td style={{textAlign:'center', color:'#888', fontSize:12}}>{s.неУчитывать || '—'}</td>
+                    <td style={{textAlign:'right', fontSize:12}}>{Math.round(s.площадьВсего).toLocaleString('ru-RU')}</td>
+                    <td style={{textAlign:'right', fontSize:12}}>{s.аренда > 0 ? s.аренда.toLocaleString('ru-RU') : '—'}</td>
+                    <td style={{textAlign:'right', fontSize:12}}>{s.коммуналка > 0 ? s.коммуналка.toLocaleString('ru-RU') : '—'}</td>
+                    <td style={{textAlign:'right', fontSize:12, fontWeight:500, color:'#534AB7'}}>{(s.аренда + s.коммуналка) > 0 ? (s.аренда + s.коммуналка).toLocaleString('ru-RU') : '—'}</td>
+                    <td>
+                      <div style={{display:'flex', alignItems:'center', gap:6}}>
+                        <div style={{flex:1, background:'#f0f0f0', borderRadius:4, height:7, overflow:'hidden'}}>
+                          <div style={{background:barColor, width:`${pct}%`, height:'100%', borderRadius:4}} />
+                        </div>
+                        <span style={{fontSize:11, color:'#888', whiteSpace:'nowrap'}}>{pct}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{fontWeight:600, background:'#f9f9fb', borderTop:'2px solid #e5e5ea'}}>
+                <td>Итого</td>
+                <td style={{textAlign:'center', color:'#aaa'}}>—</td>
+                <td style={{textAlign:'center', cursor:'pointer', textDecoration:'underline', color:'#534AB7'}}
+                  title="Перейти в Объекты"
+                  onClick={() => onNavigate('objects', null, { filterStatus: '' })}>
+                  {filteredTotals.всего}
+                </td>
+                <td style={{textAlign:'center', color:'#3B6D11', cursor:'pointer', textDecoration:'underline'}}
+                  title="Перейти в Объекты со статусом «Сдано»"
+                  onClick={() => onNavigate('objects', null, { filterStatus: 'Сдано' })}>
+                  {filteredTotals.сдано}
+                </td>
+                <td style={{textAlign:'center', color: filteredTotals.неСдано > 0 ? '#A32D2D' : '#888', cursor:'pointer', textDecoration:'underline'}}
+                  title="Перейти в Объекты со статусом «Не сдано»"
+                  onClick={() => onNavigate('objects', null, { filterStatus: 'Не сдано' })}>
+                  {filteredTotals.неСдано}
+                </td>
+                <td style={{textAlign:'center', color:'#888', fontSize:12, cursor:'pointer', textDecoration:'underline'}}
+                  title="Перейти в Объекты со статусом «Не учитывать»"
+                  onClick={() => onNavigate('objects', null, { filterStatus: 'Не учитывать' })}>
+                  {filteredTotals.неУчитывать || '—'}
+                </td>
+                <td style={{textAlign:'right', fontSize:12}}>{Math.round(filteredTotals.площадьВсего).toLocaleString('ru-RU')}</td>
+                <td style={{textAlign:'right', fontSize:12}}>{filteredTotals.аренда > 0 ? filteredTotals.аренда.toLocaleString('ru-RU') : '—'}</td>
+                <td style={{textAlign:'right', fontSize:12}}>{filteredTotals.коммуналка > 0 ? filteredTotals.коммуналка.toLocaleString('ru-RU') : '—'}</td>
+                <td style={{textAlign:'right', fontSize:12, color:'#534AB7'}}>{(filteredTotals.аренда + filteredTotals.коммуналка) > 0 ? (filteredTotals.аренда + filteredTotals.коммуналка).toLocaleString('ru-RU') : '—'}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
-      )}
 
-      {/* Модалка управления арендаторами */}
-      {showTenantsModal && selectedObjectForTenants && (
-        <div className="modal-overlay" onClick={() => setShowTenantsModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">
-              👥 Арендаторы — {selectedObjectForTenants.name}
-              <button className="modal-close" onClick={() => setShowTenantsModal(false)}>✕ Закрыть</button>
+        {selectedBuilding && (
+          <div style={{background:'#fff', border:'1px solid #e5e5e5', borderRadius:10, padding:16, position:'sticky', top:16, maxHeight:'80vh', overflowY:'auto'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+              <div style={{fontWeight:700, fontSize:14, color:'#534AB7'}}>
+                🏢 {buildingNames2[selectedBuilding]?.display_name || selectedBuilding}
+                <div style={{fontSize:11, color:'#aaa', fontWeight:400}}>{selectedBuilding}</div>
+              </div>
+              <button onClick={() => setSelectedBuilding(null)}
+                style={{background:'none', border:'none', cursor:'pointer', color:'#aaa', fontSize:16}}>✕</button>
             </div>
-            {objectTenantsList.length === 0 ? (
-              <div style={{color:'#aaa', textAlign:'center', padding:20}}>Арендаторы не привязаны</div>
-            ) : (
-              <table style={{marginBottom:16}}>
-                <thead><tr><th>Арендатор</th><th>Главный</th><th style={{width:80}}>Действия</th></tr></thead>
-                <tbody>
-                  {objectTenantsList.map(ot => (
-                    <tr key={ot.id}>
-                      <td><span style={{color:'#534AB7', cursor:'pointer', textDecoration:'underline'}}
-                        onClick={() => { setShowTenantsModal(false); onNavigate('tenants', ot.tenant_id); }}>{ot.tenant_name}</span></td>
-                      <td>{ot.is_primary ? <span style={{color:'#f59e0b', fontWeight:500}}>★ Главный</span>
-                        : <button onClick={() => setPrimaryTenant(ot.id)}
-                            style={{background:'none', border:'1px solid #ddd', borderRadius:4, padding:'2px 8px', cursor:'pointer', fontSize:12}}>Сделать главным</button>}
-                      </td>
-                      <td><button onClick={() => removeTenantFromObject(ot.id)}
-                        style={{background:'#FCEBEB', color:'#A32D2D', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12}}>✕</button></td>
-                    </tr>
+
+            {(() => {
+              const s = getBuildingStats(buildings[selectedBuilding]);
+              const pct = s.всего > 0 ? Math.round((s.сдано / s.всего) * 100) : 0;
+              return (
+                <div style={{display:'flex', gap:8, flexWrap:'wrap', fontSize:12, marginBottom:14, padding:'8px 10px', background:'#f8f8ff', borderRadius:8}}>
+                  <span>📦 <b>{s.всего}</b></span>
+                  <span style={{color:'#3B6D11'}}>✅ <b>{s.сдано}</b></span>
+                  <span style={{color:'#A32D2D'}}>❌ <b>{s.неСдано}</b></span>
+                  <span>📐 <b>{Math.round(s.площадьВсего).toLocaleString('ru-RU')}</b> м²</span>
+                  <span style={{color:'#534AB7'}}>💰 <b>{(s.аренда + s.коммуналка).toLocaleString('ru-RU')}</b> ₽</span>
+                  <span style={{color:'#888'}}>📊 <b>{pct}%</b></span>
+                </div>
+              );
+            })()}
+
+            {/* Шахматка */}
+            {(() => {
+              const objs = buildings[selectedBuilding];
+              const floors = getFloors(objs);
+              const floorKeys = Object.keys(floors)
+                .filter(f => f !== 'other')
+                .map(Number)
+                .sort((a, b) => b - a);
+              const otherObjs = floors['other'] || [];
+              return (
+                <>
+                  {floorKeys.map(floor => (
+                    <div key={floor} style={{marginBottom:12}}>
+                      <div style={{fontSize:11, fontWeight:600, color:'#aaa', marginBottom:6, letterSpacing:1}}>ЭТАЖ {floor}</div>
+                      <div style={{display:'flex', flexWrap:'wrap', gap:4}}>
+                        {floors[floor].map(obj => {
+                          const st = getStatusStyle(obj.status);
+                          const label = getShortLabel(obj);
+                          return (
+                            <div key={obj.id}
+                              onClick={() => { setSelectedBuilding(null); onNavigate('objects', obj.id); }}
+                              title={`${obj.name}\n${obj.tenant_name ? obj.tenant_name : 'Свободно'}\n${obj.area ? obj.area + ' м²' : ''}`}
+                              style={{background:st.bg, color:st.color, border:`1px solid ${st.color}`, borderRadius:6, padding:'5px 7px', fontSize:10, cursor:'pointer', minWidth:52, maxWidth:90, textAlign:'center'}}>
+                              <div style={{fontWeight:700, fontSize:11}}>{label}</div>
+                              {obj.area && <div style={{opacity:0.7}}>{obj.area}м²</div>}
+                              {obj.tenant_name && <div style={{opacity:0.85, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:9}}>{obj.tenant_name.split(' ').slice(0,2).join(' ')}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            )}
-            <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:8}}>
-              <select value={addingTenant} onChange={e => setAddingTenant(e.target.value)}
-                style={{flex:1, padding:'6px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13}}>
-                <option value="">— Выберите арендатора —</option>
-                {tenants.filter(t => !objectTenantsList.find(ot => ot.tenant_id === t.id)).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-              <button className="btn-save" onClick={() => addTenantToObject(addingTenant)} disabled={!addingTenant}>+ Добавить</button>
-            </div>
-            <button onClick={() => { setShowTenantsModal(false); setNewTenantForm({ type: 'ФИЗ.ЛИЦО', status: 'Активный', shared: false, object_id: selectedObjectForTenants.id }); setShowNewTenantFromObject(true); }}
-              style={{background:'#3B6D11', color:'#fff', border:'none', borderRadius:6, padding:'7px 14px', fontSize:13, cursor:'pointer', width:'100%'}}>
-              + Создать нового арендатора и привязать к объекту
-            </button>
-          </div>
-        </div>
-      )}
+                  {otherObjs.length > 0 && (
+                    <div>
+                      <div style={{fontSize:11, fontWeight:600, color:'#aaa', marginBottom:6, letterSpacing:1}}>ОБЩИЕ / ДРУГИЕ</div>
+                      <div style={{display:'flex', flexWrap:'wrap', gap:4}}>
+                        {otherObjs.map(obj => {
+                          const st = getStatusStyle(obj.status);
+                          const label = getShortLabel(obj);
+                          return (
+                            <div key={obj.id}
+                              onClick={() => { setSelectedBuilding(null); onNavigate('objects', obj.id); }}
+                              title={`${obj.name}\n${obj.tenant_name ? obj.tenant_name : 'Свободно'}`}
+                              style={{background:st.bg, color:st.color, border:`1px solid ${st.color}`, borderRadius:6, padding:'5px 7px', fontSize:10, cursor:'pointer', minWidth:52, maxWidth:90, textAlign:'center'}}>
+                              <div style={{fontWeight:700, fontSize:11}}>{label}</div>
+                              {obj.tenant_name && <div style={{opacity:0.85, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:9}}>{obj.tenant_name.split(' ').slice(0,2).join(' ')}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
-      {/* Форма нового арендатора */}
-      {showNewTenantFromObject && (
-        <div className="modal-overlay" onClick={() => setShowNewTenantFromObject(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">
-              Новый арендатор → {newTenantForm.object_id && objects.find(o => o.id === newTenantForm.object_id)?.name}
-              <button className="modal-close" onClick={() => setShowNewTenantFromObject(false)}>✕</button>
-            </div>
-            <div className="form-group"><label>ФИО / Название *</label>
-              <input value={newTenantForm.name||''} onChange={e => setNewTenantForm({...newTenantForm, name: e.target.value})} />
-            </div>
-            <div className="form-grid">
-              <div className="form-group"><label>Тип</label>
-                <select value={newTenantForm.type||''} onChange={e => setNewTenantForm({...newTenantForm, type: e.target.value})}>
-                  <option>ФИЗ.ЛИЦО</option><option>ЮРИД.ЛИЦО</option><option>ИП</option>
-                </select>
-              </div>
-              <div className="form-group"><label>Статус</label>
-                <select value={newTenantForm.status||''} onChange={e => setNewTenantForm({...newTenantForm, status: e.target.value})}>
-                  <option>Активный</option><option>В работе</option><option>Неактивный</option>
-                </select>
-              </div>
-              <div className="form-group"><label>Окончание договора</label>
-                <input type="date" value={newTenantForm.contract_end||''} onChange={e => setNewTenantForm({...newTenantForm, contract_end: e.target.value})} />
-              </div>
-              <div className="form-group"><label>Вид деятельности</label>
-                <input value={newTenantForm.activity||''} onChange={e => setNewTenantForm({...newTenantForm, activity: e.target.value})} />
-              </div>
-            </div>
-            <div className="form-group"><label>Комментарии</label>
-              <textarea rows={2} value={newTenantForm.comments||''} onChange={e => setNewTenantForm({...newTenantForm, comments: e.target.value})} />
-            </div>
-            <div className="form-actions">
-              <button className="btn-cancel" onClick={() => setShowNewTenantFromObject(false)}>Отмена</button>
-              <button className="btn-save" onClick={saveNewTenantFromObject}>Сохранить и привязать</button>
-            </div>
+            {/* Ключи здания */}
+            <BuildingKeysSection buildingType={selectedBuilding} />
           </div>
-        </div>
-      )}
-
-      {/* Форма объекта */}
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">
-              {form.id ? 'Редактировать объект' : 'Новый объект'}
-              <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
-            </div>
-            <div className="form-group"><label>Название *</label><input value={form.name||''} onChange={e => setForm({...form, name: e.target.value})} /></div>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Тип (здание)</label>
-                <input list="building-types-list" value={form.type||''} onChange={e => setForm({...form, type: e.target.value})}
-                  placeholder="Выберите существующее или впишите новое" />
-                <datalist id="building-types-list">
-                  {types.map(t => <option key={t} value={t} />)}
-                </datalist>
-              </div>
-              <div className="form-group"><label>Статус</label>
-                <select value={form.status||''} onChange={e => setForm({...form, status: e.target.value})}>
-                  <option>Сдано</option><option>Не сдано</option><option>Освобождается с 1 числа</option><option>Не учитывать</option><option>Не указано</option>
-                </select>
-              </div>
-              <div className="form-group"><label>Этаж</label><input type="number" value={form.floor||''} onChange={e => setForm({...form, floor: parseInt(e.target.value)})} /></div>
-              <div className="form-group"><label>Номер офиса</label><input value={form.office||''} onChange={e => setForm({...form, office: e.target.value})} /></div>
-              <div className="form-group"><label>Площадь (м²)</label><input type="number" value={form.area||''} onChange={e => setForm({...form, area: parseFloat(e.target.value)})} /></div>
-              <div className="form-group"><label>₽/мес</label><input type="number" value={form.rent||''} onChange={e => setForm({...form, rent: parseFloat(e.target.value)})} /></div>
-              <div className="form-group"><label>Страховой взнос (₽)</label><input type="number" value={form.insurance||''} onChange={e => setForm({...form, insurance: parseFloat(e.target.value)})} /></div>
-              <div className="form-group"><label>Оплата помещения</label>
-                <input value={form.payment||''} onChange={e => setForm({...form, payment: e.target.value})} placeholder="например: с 25 по 05 числа" />
-              </div>
-              <div className="form-group"><label>Коммуналка (₽)</label><input type="number" value={form.utility_cost||''} onChange={e => setForm({...form, utility_cost: parseFloat(e.target.value)})} /></div>
-              <div className="form-group"><label>Вид коммуналки</label>
-                <select value={form.utility_type||''} onChange={e => setForm({...form, utility_type: e.target.value})}>
-                  <option value="">Не указано</option><option>Фиксированная</option><option>По счётчику</option>
-                </select>
-              </div>
-            </div>
-            <div className="form-group"><label>Адрес для договора</label>
-              <input value={form.address||''} onChange={e => setForm({...form, address: e.target.value})} />
-            </div>
-            <div className="form-group"><label>Ссылка на Яндекс Диск</label><input value={form.yandex_link||''} onChange={e => setForm({...form, yandex_link: e.target.value})} placeholder="https://disk.yandex.ru/..." /></div>
-            <div className="form-group"><label>Комментарии</label><textarea rows={2} value={form.comments||''} onChange={e => setForm({...form, comments: e.target.value})} /></div>
-            <div className="form-group"><label><input type="checkbox" checked={form.shared||false} onChange={e => setForm({...form, shared: e.target.checked})} /> Совместное пользование</label></div>
-            <div className="form-actions">
-              <button className="btn-cancel" onClick={() => setShowForm(false)}>Отмена</button>
-              <button className="btn-save" onClick={saveForm}>Сохранить</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Форма выезда */}
-      {showCheckout && (
-        <div className="modal-overlay" onClick={() => setShowCheckout(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:400}}>
-            <div className="modal-title">
-              🚪 Арендатор съехал
-              <button className="modal-close" onClick={() => setShowCheckout(false)}>✕</button>
-            </div>
-            <p style={{fontSize:13, color:'#555', marginBottom:16}}>
-              Подтвердите что <strong>{checkoutData.tenantName}</strong> съехал.
-            </p>
-            <div className="form-group"><label>Дата заезда</label>
-              <input type="date" value={checkoutData.contractStart || ''}
-                onChange={e => setCheckoutData({...checkoutData, contractStart: e.target.value})} />
-            </div>
-            <div className="form-group"><label>Дата выезда</label>
-              <input type="date" value={checkoutData.date}
-                onChange={e => setCheckoutData({...checkoutData, date: e.target.value})} />
-            </div>
-            <div className="form-group"><label>Комментарий</label>
-              <input value={checkoutData.comment}
-                onChange={e => setCheckoutData({...checkoutData, comment: e.target.value})}
-                placeholder="Необязательно..." />
-            </div>
-            <div className="form-actions">
-              <button className="btn-cancel" onClick={() => setShowCheckout(false)}>Отмена</button>
-              <button style={{background:'#A32D2D', color:'#fff', border:'none', borderRadius:6, padding:'8px 14px', fontSize:13, cursor:'pointer'}}
-                onClick={confirmCheckout}>✓ Подтвердить выезд</button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
