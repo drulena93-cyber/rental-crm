@@ -226,6 +226,8 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
   const [editingBuilding, setEditingBuilding] = useState(null);
   const [editingValue, setEditingValue] = useState('');
   const [editingTypeValue, setEditingTypeValue] = useState('');
+  const [deletingBuilding, setDeletingBuilding] = useState(null);
+  const [mergeTarget, setMergeTarget] = useState('');
 
   useEffect(() => { fetchAll(false); }, []);
 
@@ -325,6 +327,37 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
 
     setEditingBuilding(null);
     if (typeChanged) setSelectedBuilding(null);
+    fetchAll(true);
+  }
+
+  async function deleteBuilding(type, target) {
+    const affected = objects.filter(o => o.type === type).length;
+    const targetLabel = target ? (buildingNames2[target]?.display_name || target) : '«тип не указан»';
+    const ok = window.confirm(
+      `Удалить здание «${buildingNames2[type]?.display_name || type}»?\n\n` +
+      `${affected} объект(ов) будут перенесены в: ${targetLabel}.`
+    );
+    if (!ok) return;
+
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: target
+          ? `UPDATE objects SET type = $1 WHERE type = $2`
+          : `UPDATE objects SET type = NULL WHERE type = $1`,
+        params: target ? [target, type] : [type]
+      })
+    });
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: `DELETE FROM buildings WHERE type = $1`, params: [type] })
+    });
+
+    setDeletingBuilding(null);
+    setMergeTarget('');
+    setSelectedBuilding(null);
     fetchAll(true);
   }
 
@@ -524,6 +557,23 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
                               style={{background:'none', border:'1px solid #ddd', borderRadius:6, color:'#888', cursor:'pointer', fontSize:12, padding:'4px 10px'}}>Отмена</button>
                           </div>
                         </div>
+                      ) : deletingBuilding === name ? (
+                        <div style={{display:'flex', flexDirection:'column', gap:4, alignItems:'flex-start'}} onClick={e => e.stopPropagation()}>
+                          <span style={{fontSize:11, color:'#A32D2D'}}>Перенести объекты в:</span>
+                          <select value={mergeTarget} onChange={e => setMergeTarget(e.target.value)}
+                            style={{padding:'4px 8px', borderRadius:6, border:'1px solid #ddd', fontSize:13, width:180}}>
+                            <option value="">— тип не указан (без здания) —</option>
+                            {buildingNames.filter(n => n !== name).map(n => (
+                              <option key={n} value={n}>{buildingNames2[n]?.display_name || n}</option>
+                            ))}
+                          </select>
+                          <div style={{display:'flex', gap:6}}>
+                            <button onClick={() => deleteBuilding(name, mergeTarget)}
+                              style={{background:'#A32D2D', color:'#fff', border:'none', borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer'}}>🗑 Удалить</button>
+                            <button onClick={() => { setDeletingBuilding(null); setMergeTarget(''); }}
+                              style={{background:'none', border:'1px solid #ddd', borderRadius:6, color:'#888', cursor:'pointer', fontSize:12, padding:'4px 10px'}}>Отмена</button>
+                          </div>
+                        </div>
                       ) : (
                         <div style={{display:'flex', alignItems:'center', gap:8}}>
                           <span style={{color:'#534AB7'}}>
@@ -532,6 +582,11 @@ export default function Buildings({ onNavigate, refreshTrigger }) {
                           <button onClick={e => { e.stopPropagation(); setEditingBuilding(name); setEditingValue(buildingNames2[name]?.display_name || name); setEditingTypeValue(name); }}
                             style={{background:'none', border:'none', color:'#aaa', cursor:'pointer', fontSize:12, padding:'2px 4px'}}>
                             ✎
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); setDeletingBuilding(name); setMergeTarget(''); }}
+                            style={{background:'none', border:'none', color:'#ddb0b0', cursor:'pointer', fontSize:12, padding:'2px 4px'}}
+                            title="Удалить здание">
+                            🗑
                           </button>
                         </div>
                       )}
