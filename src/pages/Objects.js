@@ -326,6 +326,7 @@ export default function Objects({ onNavigate, highlightId, initialFilterStatus, 
   const [selected, setSelected] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
+  const [isNewType, setIsNewType] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editingStatus, setEditingStatus] = useState(null);
@@ -541,10 +542,11 @@ for (const r of rows) {
     setEditingField(null);
   }
 
-  function openAdd() { setForm({ status: 'Не сдано', shared: false, address: 'Г.САРАТОВ. ' }); setShowForm(true); }
+  function openAdd() { setForm({ status: 'Не сдано', shared: false, address: 'Г.САРАТОВ. ' }); setIsNewType(false); setShowForm(true); }
   function openEdit(o) {
     const autoAddress = o.address || `Г.САРАТОВ. ${o.type ? o.type + '. ' : ''}${o.name}${o.floor ? ', ' + o.floor + ' этаж' : ''}${o.area ? ', ' + o.area + ' кв. м.' : ''}`;
     setForm({ ...o, address: autoAddress });
+    setIsNewType(false);
     setShowForm(true);
     setSelected(null);
   }
@@ -1002,11 +1004,25 @@ for (const r of rows) {
             <div className="form-grid">
               <div className="form-group">
                 <label>Тип (здание)</label>
-                <input list="building-types-list" value={form.type||''} onChange={e => setForm({...form, type: e.target.value})}
-                  placeholder="Выберите существующее или впишите новое" />
-                <datalist id="building-types-list">
-                  {types.map(t => <option key={t} value={t} />)}
-                </datalist>
+                {!isNewType ? (
+                  <select value={form.type || ''} onChange={e => {
+                    if (e.target.value === '__NEW__') { setIsNewType(true); setForm({...form, type: ''}); }
+                    else setForm({...form, type: e.target.value});
+                  }}>
+                    <option value="">— не указан —</option>
+                    {types.map(t => <option key={t} value={t}>{t}</option>)}
+                    <option value="__NEW__">+ Новое здание...</option>
+                  </select>
+                ) : (
+                  <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                    <input autoFocus placeholder="Впишите новый технический тип"
+                      value={form.type || ''} onChange={e => setForm({...form, type: e.target.value})} />
+                    <button type="button" onClick={() => { setIsNewType(false); setForm({...form, type: ''}); }}
+                      style={{background:'#f4f4f8', border:'1px solid #ddd', borderRadius:6, padding:'6px 10px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap'}}>
+                      ✕ Выбрать из списка
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="form-group"><label>Статус</label>
                 <select value={form.status||''} onChange={e => setForm({...form, status: e.target.value})}>
