@@ -93,12 +93,13 @@ export default function Analytics({ onNavigate, refreshTrigger }) {
   const заполненность = учитываемые.length ? Math.round(сдано.length / учитываемые.length * 100) : 0;
   const активные = tenants.filter(t => t.status === 'Активный');
   const активныеБезОбъекта = tenants.filter(t => t.status === 'Активный' && !objectTenants.some(ot => ot.tenant_id === t.id));
+  const неактивные = tenants.filter(t => t.status === 'Неактивный');
+  const вРаботе = tenants.filter(t => t.status === 'В работе');
+  const съехали = tenants.filter(t => t.status === 'Съехал');
+  const статусНеУказан = tenants.filter(t => !t.status);
   const isRenter = (c) => !c.contact_type || c.contact_type === 'Арендатор';
   const контактыАрендаторы = contacts.filter(c => isRenter(c));
   const контактыПодрядчики = contacts.filter(c => !isRenter(c));
-  const документыДоговоры = documents.filter(d => d.type === 'Договор');
-  const документыАкты = documents.filter(d => d.type === 'Акт');
-  const документыСчета = documents.filter(d => d.type === 'Счёт');
   const ип = активные.filter(t => t.type === 'ИП');
   const ооо = активные.filter(t => t.type === 'ЮРИД.ЛИЦО');
   const физ = активные.filter(t => t.type === 'ФИЗ.ЛИЦО');
@@ -213,6 +214,11 @@ export default function Analytics({ onNavigate, refreshTrigger }) {
           <tr>
             <td style={{color:'#888'}}>Арендаторы</td>
             <td>
+              <span style={{marginRight:20}}>Активный <b style={{color:'#3B6D11'}}>{активные.length}</b></span>
+              <span style={{marginRight:20}}>Неактивный <b style={{color:'#888'}}>{неактивные.length}</b></span>
+              <span style={{marginRight:20}}>В работе <b style={{color:'#185FA5'}}>{вРаботе.length}</b></span>
+              <span style={{marginRight:20}}>Съехал <b style={{color:'#A32D2D'}}>{съехали.length}</b></span>
+              <span style={{marginRight:20}}>Не указан <b style={{color:'#888'}}>{статусНеУказан.length}</b></span>
               <span>Активных без объекта <b style={{color:'#A32D2D'}}>{активныеБезОбъекта.length}</b></span>
             </td>
           </tr>
@@ -222,15 +228,6 @@ export default function Analytics({ onNavigate, refreshTrigger }) {
               <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{contacts.length}</b></span>
               <span style={{marginRight:20}}>Арендаторов <b style={{color:'#3B6D11'}}>{контактыАрендаторы.length}</b></span>
               <span>Подрядчиков <b style={{color:'#8A5A0B'}}>{контактыПодрядчики.length}</b></span>
-            </td>
-          </tr>
-          <tr>
-            <td style={{color:'#888'}}>Документы</td>
-            <td>
-              <span style={{marginRight:20}}>Всего <b style={{color:'#534AB7'}}>{documents.length}</b></span>
-              <span style={{marginRight:20}}>Договоров <b style={{color:'#185FA5'}}>{документыДоговоры.length}</b></span>
-              <span style={{marginRight:20}}>Актов <b style={{color:'#3B6D11'}}>{документыАкты.length}</b></span>
-              <span>Счетов <b style={{color:'#8A5A0B'}}>{документыСчета.length}</b></span>
             </td>
           </tr>
         </tbody>
