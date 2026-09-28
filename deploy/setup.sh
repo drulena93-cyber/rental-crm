@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
-# Одноразовая установка CRM на чистый сервер Ubuntu 24.04.
+# Одноразовая установка портала «Финансы» на сервер, где уже работает CRM.
 #
 # Запуск (от root):
-#   bash /opt/rental-crm/deploy/setup.sh
+#   bash /opt/eria-finansy/deploy/setup.sh
 #
-# Скрипт можно запускать повторно — уже сделанные шаги он пропустит.
-# Дополнительно:
-#   bash /opt/rental-crm/deploy/setup.sh --password   — сменить логин/пароль входа в CRM
-#   bash /opt/rental-crm/deploy/setup.sh --env        — заново ввести доступы к базе и токен
+# Можно запускать повторно — сделанные шаги пропускаются.
+#   bash /opt/eria-finansy/deploy/setup.sh --password   — сменить логин/пароль входа в портал
+#   bash /opt/eria-finansy/deploy/setup.sh --env        — заново ввести доступы к базе
 set -euo pipefail
 
-APP_DIR=/opt/rental-crm
-ENV_FILE=/etc/rental-crm.env
-HTPASSWD=/etc/nginx/.htpasswd-crm
-SERVICE=/etc/systemd/system/rental-crm.service
+APP_DIR=/opt/eria-finansy
+ENV_FILE=/etc/eria-finansy.env
+CRM_ENV=/etc/rental-crm.env
+HTPASSWD=/etc/nginx/.htpasswd-eria
+CRM_HTPASSWD=/etc/nginx/.htpasswd-crm
+SERVICE=/etc/systemd/system/eria-finansy.service
+TOOL="node $APP_DIR/deploy/envtool.js"
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Запустите скрипт от имени root."; exit 1
-fi
+if [ "$(id -u)" -ne 0 ]; then echo "Запустите скрипт от имени root."; exit 1; fi
 
-RESET_PASSWORD=false
-RESET_ENV=false
+RESET_PASSWORD=false; RESET_ENV=false
 for arg in "$@"; do
   case "$arg" in
     --password) RESET_PASSWORD=true ;;
@@ -29,114 +28,104 @@ for arg in "$@"; do
 done
 
 step() { echo; echo "==> $1"; }
+# Значения в кавычках: пароль может содержать спецсимволы
+q() { local v=${1//\\/\\\\}; v=${v//\"/\\\"}; printf '"%s"' "$v"; }
 
 # ---------------------------------------------------------------- 1. Программы
-step "1/8 Устанавливаю системные программы (Nginx, Git) — пара минут"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq nginx git curl ca-certificates openssl > /dev/null
-echo "Готово."
-
-# ---------------------------------------------------------------- 2. Node.js
-step "2/8 Устанавливаю Node.js"
-NODE_MAJOR=0
-if command -v node > /dev/null; then
-  NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
+step "1/6 Проверяю программы (Node.js, Nginx)"
+if ! command -v node > /dev/null || ! command -v nginx > /dev/null; then
+  echo "Не найдены Node.js или Nginx. Сначала должна быть установлена CRM (deploy/setup.sh из rental-crm)."
+  exit 1
 fi
-if [ "$NODE_MAJOR" -ge 18 ]; then
-  echo "Node.js уже установлен: $(node -v)"
-else
-  if curl -fsSL --max-time 60 https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh \
-     && bash /tmp/nodesource_setup.sh > /dev/null 2>&1 \
-     && apt-get install -y -qq nodejs > /dev/null; then
-    echo "Установлен Node.js $(node -v) (NodeSource)"
-  else
-    echo "NodeSource недоступен — ставлю Node.js из репозитория Ubuntu"
-    apt-get install -y -qq nodejs npm > /dev/null
-    echo "Установлен Node.js $(node -v)"
-  fi
-fi
+echo "Node.js $(node -v), Nginx — на месте."
 
-# ---------------------------------------------------------------- 3. Подкачка
-step "3/8 Файл подкачки (страховка памяти при сборке)"
-if swapon --show | grep -q .; then
-  echo "Подкачка уже есть."
-else
-  fallocate -l 2G /swapfile
-  chmod 600 /swapfile
-  mkswap /swapfile > /dev/null
-  swapon /swapfile
-  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  echo "Создан файл подкачки 2 ГБ."
-fi
-
-# ---------------------------------------------------------------- 4. Настройки
-step "4/8 Доступы к базе данных и Яндекс Диску"
+# ---------------------------------------------------------------- 2. Настройки
+step "2/6 Доступы к базе данных портала"
 if [ -f "$ENV_FILE" ] && [ "$RESET_ENV" = false ]; then
   echo "Файл настроек уже есть ($ENV_FILE) — пропускаю. Чтобы ввести заново: setup.sh --env"
 else
-  echo "Сейчас нужно ввести доступы. В квадратных скобках — значение по умолчанию,"
-  echo "если оно верное, просто нажмите Enter."
-  echo "Пароль и токен при вводе НЕ отображаются на экране — это нормально."
+  echo "Введите доступы к НОВОЙ базе портала на SpaceWeb (не к Supabase и не к базе CRM)."
+  echo "В квадратных скобках — значение по умолчанию: если верно, просто нажмите Enter."
+  echo "Пароль при вводе НЕ отображается на экране — это нормально."
   echo
-  read -r -p "Адрес базы (DB_HOST) [79.174.88.49]: " DB_HOST;   DB_HOST=${DB_HOST:-79.174.88.49}
-  read -r -p "Порт базы (DB_PORT) [19165]: " DB_PORT;           DB_PORT=${DB_PORT:-19165}
-  read -r -p "Имя базы (DB_NAME) [rental_crm]: " DB_NAME;       DB_NAME=${DB_NAME:-rental_crm}
+  read -r -p "Адрес базы [79.174.88.49]: " DB_HOST; DB_HOST=${DB_HOST:-79.174.88.49}
+  read -r -p "Порт базы [19165]: " DB_PORT;       DB_PORT=${DB_PORT:-19165}
+  DB_NAME=""
+  while [ -z "$DB_NAME" ]; do read -r -p "ТЕХНИЧЕСКОЕ имя базы (из панели SpaceWeb): " DB_NAME; done
   DB_USER=""
-  while [ -z "$DB_USER" ]; do read -r -p "Пользователь базы (DB_USER): " DB_USER; done
+  while [ -z "$DB_USER" ]; do read -r -p "Пользователь базы: " DB_USER; done
   DB_PASSWORD=""
-  while [ -z "$DB_PASSWORD" ]; do read -r -s -p "Пароль пользователя базы (DB_PASSWORD): " DB_PASSWORD; echo; done
-  read -r -s -p "Токен Яндекс Диска (YANDEX_DISK_TOKEN), можно оставить пустым и добавить позже: " YANDEX_DISK_TOKEN; echo
+  while [ -z "$DB_PASSWORD" ]; do read -r -s -p "Пароль пользователя базы: " DB_PASSWORD; echo; done
 
-  # Значения в кавычках: пароль может содержать спецсимволы
-  q() { local v=${1//\\/\\\\}; v=${v//\"/\\\"}; printf '"%s"' "$v"; }
+  if [ -f "$CRM_ENV" ]; then
+    CRM_NAME=$($TOOL get "$CRM_ENV" DB_NAME)
+    if [ "$DB_NAME" = "$CRM_NAME" ]; then
+      echo "ОШИБКА: это база CRM ($CRM_NAME). Для портала нужна отдельная новая база."; exit 1
+    fi
+  fi
+
+  DATABASE_URL=$(PASS="$DB_PASSWORD" $TOOL url "$DB_HOST" "$DB_PORT" "$DB_NAME" "$DB_USER")
+  CRM_DATABASE_URL=""
+  if [ -f "$CRM_ENV" ]; then
+    CRM_DATABASE_URL=$($TOOL crm-url "$CRM_ENV")
+    echo "Подключение к базе CRM (для кнопки «Обновить арендаторов») взято из настроек CRM."
+  else
+    echo "ВНИМАНИЕ: настройки CRM не найдены — синхронизация арендаторов работать не будет."
+  fi
+
   umask 077
   {
-    echo "DB_HOST=$(q "$DB_HOST")"
-    echo "DB_PORT=$(q "$DB_PORT")"
-    echo "DB_NAME=$(q "$DB_NAME")"
-    echo "DB_USER=$(q "$DB_USER")"
-    echo "DB_PASSWORD=$(q "$DB_PASSWORD")"
-    echo "YANDEX_DISK_TOKEN=$(q "$YANDEX_DISK_TOKEN")"
-    echo "PORT=3001"
+    echo "DATABASE_URL=$(q "$DATABASE_URL")"
+    echo "CRM_DATABASE_URL=$(q "$CRM_DATABASE_URL")"
+    echo "PORT=3002"
   } > "$ENV_FILE"
   chmod 600 "$ENV_FILE"
   umask 022
+  unset DB_PASSWORD
   echo "Сохранено в $ENV_FILE (доступно только root)."
 fi
 
-# ---------------------------------------------------------------- 5. Пароль на вход
-step "5/8 Логин и пароль для входа в CRM"
+# ---------------------------------------------------------------- 3. Пароль на вход
+step "3/6 Логин и пароль для входа в портал"
 if [ -f "$HTPASSWD" ] && [ "$RESET_PASSWORD" = false ]; then
   echo "Пароль на вход уже задан — пропускаю. Чтобы сменить: setup.sh --password"
 else
-  CRM_LOGIN=""
-  while [ -z "$CRM_LOGIN" ]; do read -r -p "Придумайте логин для входа в CRM: " CRM_LOGIN; done
-  while true; do
-    read -r -s -p "Придумайте пароль (не короче 8 символов): " P1; echo
-    read -r -s -p "Повторите пароль: " P2; echo
-    if [ "${#P1}" -lt 8 ]; then echo "Слишком короткий, попробуйте ещё раз."; continue; fi
-    if [ "$P1" != "$P2" ]; then echo "Пароли не совпадают, попробуйте ещё раз."; continue; fi
-    break
-  done
-  printf '%s:%s\n' "$CRM_LOGIN" "$(openssl passwd -apr1 "$P1")" > "$HTPASSWD"
+  SAME="n"
+  if [ -f "$CRM_HTPASSWD" ]; then
+    read -r -p "Использовать тот же логин и пароль, что для входа в CRM? (да/нет) [нет]: " SAME
+  fi
+  if [ "$SAME" = "да" ] || [ "$SAME" = "y" ] || [ "$SAME" = "yes" ]; then
+    cp "$CRM_HTPASSWD" "$HTPASSWD"
+    echo "Скопирован логин и пароль от CRM."
+  else
+    LOGIN=""
+    while [ -z "$LOGIN" ]; do read -r -p "Придумайте логин для входа в портал: " LOGIN; done
+    while true; do
+      read -r -s -p "Придумайте пароль (не короче 8 символов): " P1; echo
+      read -r -s -p "Повторите пароль: " P2; echo
+      if [ "${#P1}" -lt 8 ]; then echo "Слишком короткий, попробуйте ещё раз."; continue; fi
+      if [ "$P1" != "$P2" ]; then echo "Пароли не совпадают, попробуйте ещё раз."; continue; fi
+      break
+    done
+    printf '%s:%s\n' "$LOGIN" "$(openssl passwd -apr1 "$P1")" > "$HTPASSWD"
+    unset P1 P2
+    echo "Логин и пароль сохранены."
+  fi
   chown root:www-data "$HTPASSWD"
   chmod 640 "$HTPASSWD"
-  unset P1 P2
-  echo "Логин и пароль сохранены."
 fi
 
-# ---------------------------------------------------------------- 6. Служба
-step "6/8 Служба, которая держит сервер CRM запущенным"
-id -u crm > /dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin crm
+# ---------------------------------------------------------------- 4. Служба
+step "4/6 Служба, которая держит сервер портала запущенным"
+id -u eria > /dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin eria
 cat > "$SERVICE" <<EOF
 [Unit]
-Description=Rental CRM API server
+Description=Eria finance portal API server
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=crm
+User=eria
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
 ExecStart=$(command -v node) $APP_DIR/server.js
@@ -147,39 +136,43 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable rental-crm > /dev/null 2>&1
-echo "Служба rental-crm настроена (перезапускается сама при сбое и после перезагрузки сервера)."
+systemctl enable eria-finansy > /dev/null 2>&1
+echo "Служба eria-finansy настроена."
 
-# ---------------------------------------------------------------- 7. Nginx
-step "7/8 Настраиваю Nginx"
-cp "$APP_DIR/deploy/nginx-crm.conf" /etc/nginx/sites-available/rental-crm
-ln -sf /etc/nginx/sites-available/rental-crm /etc/nginx/sites-enabled/rental-crm
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl enable nginx > /dev/null 2>&1
-systemctl reload nginx || systemctl restart nginx
-echo "Nginx настроен."
+# ---------------------------------------------------------------- 5. Nginx
+step "5/6 Настраиваю Nginx"
+if [ -f /etc/nginx/sites-available/portals-https ]; then
+  # HTTPS настроен скриптом enable-https.sh (из rental-crm) — его настройки не перезаписываем
+  echo "HTTPS уже настроен (enable-https.sh) — настройки Nginx не меняю."
+else
+  cp "$APP_DIR/deploy/nginx-eria.conf" /etc/nginx/sites-available/eria-finansy
+  ln -sf /etc/nginx/sites-available/eria-finansy /etc/nginx/sites-enabled/eria-finansy
+  nginx -t
+  systemctl reload nginx
+  echo "Nginx настроен."
+fi
 
-# ---------------------------------------------------------------- 8. Сборка и запуск
-step "8/8 Собираю и запускаю CRM"
+# ---------------------------------------------------------------- 6. Запуск
+step "6/6 Запускаю портал"
 bash "$APP_DIR/deploy/deploy.sh"
 
-# ---------------------------------------------------------------- Проверка базы
 echo
-echo "==> Проверяю подключение к базе данных"
-RESULT=$(curl -s -X POST http://127.0.0.1:3001/api/db \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"SELECT COUNT(*) AS n FROM objects","params":[]}')
+echo "==> Проверяю подключения"
+RESULT=$(curl -s -X POST http://127.0.0.1:3002/api/db -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT count(*) AS tables FROM information_schema.tables WHERE table_schema = '"'"'public'"'"'","params":[]}')
 if echo "$RESULT" | grep -q '"rows"'; then
-  echo "База подключена. Ответ: $RESULT"
+  echo "База портала подключена. Таблиц в ней сейчас: $(echo "$RESULT" | grep -o '"tables":"[0-9]*"' | grep -o '[0-9]*')"
+  echo "(0 — это нормально до переноса данных из Supabase)"
 else
-  echo "ОШИБКА подключения к базе: $RESULT"
-  echo "Проверьте логин/пароль базы и введите их заново: bash $APP_DIR/deploy/setup.sh --env"
+  echo "ОШИБКА подключения к базе портала: $RESULT"
+  echo "Введите доступы заново: bash $APP_DIR/deploy/setup.sh --env"
 fi
 
 IP=$(hostname -I | awk '{print $1}')
 echo
 echo "=============================================="
-echo " Установка завершена."
-echo " Откройте в браузере:  http://$IP"
+echo " Установка портала завершена."
+echo " Следующий шаг — перенос данных:"
+echo "   bash $APP_DIR/deploy/migrate-from-supabase.sh"
+echo " Адрес портала:  http://$IP:8080"
 echo "=============================================="
